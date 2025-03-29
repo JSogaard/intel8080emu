@@ -1,7 +1,12 @@
 use clap::{Parser, Subcommand};
+use disassembler::disassemble::disassemble;
 
 fn main() {
-    todo!()
+    match Cli::parse().command {
+        Commands::Disassemble { rom_path, output } => {
+            disassemble(&rom_path, output)?;
+        }
+    }
 }
 
 #[derive(Parser)]
