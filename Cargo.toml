@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["intel8080_core"]
+members = [ "cli", "disassembler","intel8080_core"]
