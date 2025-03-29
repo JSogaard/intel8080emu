@@ -1,12 +1,15 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use disassembler::disassemble::disassemble;
 
-fn main() {
+fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Disassemble { rom_path, output } => {
-            disassemble(&rom_path, output)?;
+            disassemble(&rom_path, output)?
         }
     }
+
+    Ok(())
 }
 
 #[derive(Parser)]
