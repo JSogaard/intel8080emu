@@ -3,18 +3,20 @@ use crate::errors::{Error, Result};
 pub struct Memory {
     data: Vec<u8>,
     size: usize,
+    memory_mapper: fn(u16) -> usize,
 }
 
 impl Memory {
-    pub fn new(size: usize) -> Self {
+    pub fn new(size: usize, memory_mapper: fn(u16) -> usize) -> Self {
         Self {
             data: vec![0; size],
             size,
+            memory_mapper,
         }
     }
 
     pub fn read(&self, address: u16) -> Result<u8> {
-        let address = address as usize;
+        let address = (self.memory_mapper)(address);
         if address >= self.size {
             return Err(Error::InvalidMemoryError)
         }
@@ -22,7 +24,7 @@ impl Memory {
     }
 
     pub fn write(&mut self, address: u16, value: u8) -> Result<()> {
-        let address = address as usize;
+        let address = (self.memory_mapper)(address);
         if address >= self.size {
             return Err(Error::InvalidMemoryError)
         }

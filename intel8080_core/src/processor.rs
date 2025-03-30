@@ -1,4 +1,4 @@
-use self::{Register8bit::*, Register16bit::*};
+use self::{Reg8bit::*, Reg16bit::*};
 use crate::{memory::Memory, errors::{Result, Error}};
 
 pub struct Processor {
@@ -24,24 +24,8 @@ struct Flags {
     pub ac: bool,
 }
 
-enum Register8bit {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-}
-
-enum Register16bit {
-    BC,
-    DE,
-    HL,
-}
-
 impl Processor {
-    pub fn new(ram_size: usize) -> Self {
+    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> usize) -> Self {
         Self {
             a: 0,
             b: 0,
@@ -52,7 +36,7 @@ impl Processor {
             l: 0,
             sp: 0,
             pc: 0,
-            ram: Memory::new(ram_size),
+            ram: Memory::new(ram_size, memory_mapper),
             rom_loaded: false,
             flags: Flags {
                 s: false,
@@ -64,18 +48,38 @@ impl Processor {
         }
     }
 
-    pub fn execute(&mut self) -> Result<()> {
-        let opcode = self.ram.read(self.pc)?;
+    pub fn execute(&mut self) -> Result<u32> {
+        let opcode: u8 = self.ram.read(self.pc)?;
+        let cycles: u32 = 0;
 
         match opcode {
+            // Nop opcodes
             0x00 | 0x20 | 0x30 => {}
-            0x01 => todo!(),
+
+            //
+            
 
             _ => return Err(Error::UnimplementedOpcodeError(opcode))
         }
 
         self.pc += 1;
 
-        Ok(())
+        Ok(cycles)
     }
+}
+
+enum Reg8bit {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+}
+
+enum Reg16bit {
+    BC,
+    DE,
+    HL,
 }
