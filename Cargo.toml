@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "cli", "disassembler","intel8080_core"]
+members = ["disassembler","intel8080_core"]
 
 [profile.dev]
 debug = 2
