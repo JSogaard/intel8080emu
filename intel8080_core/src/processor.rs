@@ -50,13 +50,18 @@ impl Processor {
 
     pub fn execute(&mut self) -> Result<u32> {
         let opcode: u8 = self.ram.read(self.pc)?;
-        let cycles: u32 = 0;
+        let mut cycles: u32 = 0;
 
         match opcode {
             // Nop opcodes
             0x00 | 0x20 | 0x30 => {}
 
-            //
+            // MOV Register to register
+            0x40..0x70 if !matches!(opcode & 0xF, 0x6 | 0xE) => {
+                self.mov_registers(opcode);
+                self.pc += 1;
+                cycles = 5;
+            }
             
 
             _ => return Err(Error::UnimplementedOpcodeError(opcode))
@@ -65,6 +70,22 @@ impl Processor {
         self.pc += 1;
 
         Ok(cycles)
+    }
+
+    fn get_reg(&self, reg: u8) -> Option<u8> {
+        match reg {
+            0b111 => Some(self.a),
+
+        }
+    }
+
+    fn mov_registers(&mut self, opcode: u8) {
+        // TODO MOV registers
+
+        let dest_reg = (opcode >> 3) & 0b111;
+        let source_reg = opcode & 0b111;
+
+        todo!()
     }
 }
 
