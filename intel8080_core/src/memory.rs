@@ -23,6 +23,14 @@ impl Memory {
         Ok(self.data[address])
     }
 
+    pub fn read_mut(&mut self, address: u16) -> Result<&mut u8> {
+        let address = (self.memory_mapper)(address);
+        if address >= self.size {
+            return Err(Error::InvalidMemoryError)
+        }
+        Ok(&mut self.data[address])
+    }
+
     pub fn write(&mut self, address: u16, value: u8) -> Result<()> {
         let address = (self.memory_mapper)(address);
         if address >= self.size {
