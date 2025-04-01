@@ -53,11 +53,14 @@ impl Processor {
 
     pub fn execute(&mut self) -> Result<u32> {
         let opcode: u8 = self.ram.read(self.pc)?;
-        let mut cycles: u32 = 0;
+        let cycles: u32;
 
         match opcode {
             // NOP opcodes
-            0x00 | 0x20 | 0x30 => {}
+            0x00 => {
+                self.pc += 1;
+                cycles = 4;
+            }
 
             // HLT opcode
             0x76 => return Err(Error::SystemHalt),
@@ -71,34 +74,56 @@ impl Processor {
             // MVI opcodes
             0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E => {
                 let data = self.ram.read(self.pc + 1)?;
-                self.mvi_opcode(opcode, data)?
+                self.mvi_opcode(opcode, data)?;
+                self.pc += 2;
+                cycles = 7;
             }
 
             // LXI opcodes
             0x01 | 0x11 | 0x21 | 0x31 => {
                 let (low_byte, high_byte) = self.get_next_16bit()?;
                 self.lxi_opcode(opcode, low_byte, high_byte);
-                self.pc += 2;
+                self.pc += 3;
+                cycles = 10;
             }
 
             // LDA opcode
             0x3A => {
                 let (low_byte, high_byte) = self.get_next_16bit()?;
                 self.lda_opcode(low_byte, high_byte)?;
-                self.pc += 2;
+                self.pc += 3;
+                cycles = 13;
             }
 
             // STA opcode
             0x32 => {
                 let (low_byte, high_byte) = self.get_next_16bit()?;
                 self.sta_opcode(low_byte, high_byte)?;
-                self.pc += 2;
+                self.pc += 3;
+                cycles = 13;
             }
 
-            _ => return Err(Error::UnimplementedOpcodeError(opcode)),
-        }
+            // LHLD opcode
+            0x2A => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.lhld_opcode(low_byte, high_byte)?;
+                self.pc += 3;
+                cycles = 16;
+            }
 
-        self.pc += 1;
+            // SHLD opcode
+            0x22 => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.shld_opcode(low_byte, high_byte)?;
+                self.pc += 3;
+                cycles = 16;
+            }
+
+            // Invalid opcodes
+            0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
+                return Err(Error::UnimplementedOpcodeError(opcode));
+            }
+        }
 
         Ok(cycles)
     }
@@ -164,7 +189,7 @@ impl Processor {
 
     fn get_next_16bit(&self) -> Result<(u8, u8)> {
         let low_byte = self.ram.read(self.pc + 1)?;
-        let high_byte = self.ram.read(self.pc + 1)?;
+        let high_byte = self.ram.read(self.pc + 2)?;
         Ok((low_byte, high_byte))
     }
 
@@ -204,6 +229,22 @@ impl Processor {
     fn sta_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
         let address = bytes_to_16bit(low_byte, high_byte);
         self.ram.write(address, self.a)?;
+
+        Ok(())
+    }
+
+    fn lhld_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.l = self.ram.read(address)?;
+        self.h = self.ram.read(address + 1)?;
+
+        Ok(())
+    }
+
+    fn shld_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.ram.write(address, self.l)?;
+        self.ram.write(address + 1, self.h)?;
 
         Ok(())
     }
