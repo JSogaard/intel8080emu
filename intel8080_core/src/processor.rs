@@ -1,4 +1,8 @@
-use crate::{memory::Memory, errors::{Result, Error}};
+use crate::{
+    errors::{Error, Result},
+    helpers::bytes_to_16bit,
+    memory::Memory,
+};
 
 pub struct Processor {
     a: u8,
@@ -63,45 +67,45 @@ impl Processor {
                 cycles = self.mov_opcode(opcode)?;
                 self.pc += 1;
             }
-            
+
             // MVI opcodes
             0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E => {
                 let data = self.ram.read(self.pc + 1)?;
                 self.mvi_opcode(opcode, data)?
             }
 
-            _ => return Err(Error::UnimplementedOpcodeError(opcode))
+            // LXI opcodes
+            0x01 | 0x11 | 0x21 | 0x31 => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.lxi_opcode(opcode, low_byte, high_byte);
+                self.pc += 2;
+            }
+
+            // LDA opcode
+            0x3A => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.lda_opcode(low_byte, high_byte)?;
+                self.pc += 2;
+            }
+
+            // STA opcode
+            0x32 => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.sta_opcode(low_byte, high_byte)?;
+                self.pc += 2;
+            }
+
+            _ => return Err(Error::UnimplementedOpcodeError(opcode)),
         }
 
         self.pc += 1;
 
         Ok(cycles)
     }
-    
-    fn mov_opcode(&mut self, opcode: u8) -> Result<u32> {
-        let (source, from_memory) = self.get_source_reg(opcode & 0b111)?;
-        
-        let destination = self.get_dest_reg((opcode >> 3) & 0b111)?;
 
-        *destination = source;
-
-        let cycles = match from_memory {
-            true => 7,
-            false => 5,
-        };
-        Ok(cycles)
-    }
-
-    fn mvi_opcode(&mut self, opcode: u8, data: u8) -> Result<()> {
-        let destination = self.get_dest_reg((opcode >> 3) & 0b111)?;
-        *destination = data;
-
-        Ok(())
-    }
-
-    fn get_source_reg(&mut self, reg: u8) -> Result<(u8, bool)> {
+    fn get_source_reg(&mut self, opcode: u8) -> Result<(u8, bool)> {
         let mut from_memory = false;
-        let source = match reg {
+        let source = match opcode & 0b111 {
             0b111 => self.a,
             0b000 => self.b,
             0b001 => self.c,
@@ -113,15 +117,14 @@ impl Processor {
                 from_memory = true;
                 self.ram.read(self.get_hl())?
             }
-            _ => panic!("Failed to parse register {:#b}", reg),
+            _ => panic!("Failed to parse register {:#b}", opcode & 0b111),
         };
 
         Ok((source, from_memory))
     }
 
-    fn get_dest_reg(&mut self, reg: u8) -> Result<&mut u8> {
-        // TODO Change to a setter function
-        let destination = match reg {
+    fn set_dest_reg(&mut self, opcode: u8, data: u8) -> Result<()> {
+        let destination: &mut u8 = match (opcode >> 3) & 0b111 {
             0b111 => &mut self.a,
             0b000 => &mut self.b,
             0b001 => &mut self.c,
@@ -130,22 +133,78 @@ impl Processor {
             0b100 => &mut self.h,
             0b101 => &mut self.l,
             0b110 => self.ram.read_mut(self.get_hl())?,
-            _ => panic!("Failed to parse register in opcode: {:#b}", reg),
+            _ => panic!("Failed to parse register: {:#b}", (opcode >> 3) & 0b111),
         };
-        Ok(destination)
+        *destination = data;
+
+        Ok(())
     }
-    
+
+    fn set_reg_pair(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
+        match (opcode >> 4) & 0b11 {
+            0b00 => (self.b, self.c) = (high_byte, low_byte),
+            0b01 => (self.d, self.e) = (high_byte, low_byte),
+            0b10 => (self.h, self.l) = (high_byte, low_byte),
+            0b11 => self.sp = bytes_to_16bit(low_byte, high_byte),
+            _ => panic!("Failed to parse registerpair: {:#b}", (opcode >> 4) & 0b11),
+        }
+    }
+
     fn get_bc(&self) -> u16 {
-        ((self.b as u16) << 8) & self.c as u16
+        bytes_to_16bit(self.c, self.b)
     }
 
     fn get_de(&self) -> u16 {
-        ((self.d as u16) << 8) & self.e as u16
+        bytes_to_16bit(self.e, self.d)
     }
 
     fn get_hl(&self) -> u16 {
-        ((self.h as u16) << 8) &self.l as u16
+        bytes_to_16bit(self.l, self.h)
     }
 
+    fn get_next_16bit(&self) -> Result<(u8, u8)> {
+        let low_byte = self.ram.read(self.pc + 1)?;
+        let high_byte = self.ram.read(self.pc + 1)?;
+        Ok((low_byte, high_byte))
+    }
 
+    // =====================================================================
+    //                          OPCODE METHODS
+    // =====================================================================
+
+    fn mov_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+
+        self.set_dest_reg(opcode, source)?;
+
+        let cycles = match from_memory {
+            true => 7,
+            false => 5,
+        };
+        Ok(cycles)
+    }
+
+    fn mvi_opcode(&mut self, opcode: u8, data: u8) -> Result<()> {
+        self.set_dest_reg(opcode, data)?;
+
+        Ok(())
+    }
+
+    fn lxi_opcode(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
+        self.set_reg_pair(opcode, low_byte, high_byte);
+    }
+
+    fn lda_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.a = self.ram.read(address)?;
+
+        Ok(())
+    }
+
+    fn sta_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.ram.write(address, self.a)?;
+
+        Ok(())
+    }
 }
