@@ -126,6 +126,20 @@ impl Processor {
                 cycles = 7;
             }
 
+            // Stax
+            0x02 | 0x12 => {
+                self.stax_opcode(opcode)?;
+                self.pc += 1;
+                cycles = 7;
+            }
+
+            // XCHG opcode
+            0xEB => {
+                self.xchg_opcode();
+                self.pc += 1;
+                cycles = 5;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnimplementedOpcodeError(opcode));
@@ -271,5 +285,21 @@ impl Processor {
         self.a = self.ram.read(address)?;
 
         Ok(())
+    }
+
+    fn stax_opcode(&mut self, opcode: u8) -> Result<()> {
+        let address = self.get_reg_pair(opcode);
+        self.ram.write(address, self.a)?;
+
+        Ok(())
+    }
+
+    fn xchg_opcode(&mut self) {
+        let d_prev = self.d;
+        let e_prev = self.e;
+        self.d = self.h;
+        self.e = self.l;
+        self.h = d_prev;
+        self.l = e_prev;
     }
 }
