@@ -119,6 +119,13 @@ impl Processor {
                 cycles = 16;
             }
 
+            // LDAX opcode
+            0x0A | 0x1A => {
+                self.ldax_opcode(opcode)?;
+                self.pc += 1;
+                cycles = 7;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnimplementedOpcodeError(opcode));
@@ -171,6 +178,16 @@ impl Processor {
             0b01 => (self.d, self.e) = (high_byte, low_byte),
             0b10 => (self.h, self.l) = (high_byte, low_byte),
             0b11 => self.sp = bytes_to_16bit(low_byte, high_byte),
+            _ => panic!("Failed to parse registerpair: {:#b}", (opcode >> 4) & 0b11),
+        }
+    }
+
+    fn get_reg_pair(&self, opcode: u8) -> u16 {
+        match (opcode >> 4) & 0b11 {
+            0b00 => bytes_to_16bit(self.c, self.b),
+            0b01 => bytes_to_16bit(self.e, self.d),
+            0b10 => bytes_to_16bit(self.l, self.h),
+            0b11 => self.sp,
             _ => panic!("Failed to parse registerpair: {:#b}", (opcode >> 4) & 0b11),
         }
     }
@@ -245,6 +262,13 @@ impl Processor {
         let address = bytes_to_16bit(low_byte, high_byte);
         self.ram.write(address, self.l)?;
         self.ram.write(address + 1, self.h)?;
+
+        Ok(())
+    }
+
+    fn ldax_opcode(&mut self, opcode: u8) -> Result<()> {
+        let address = self.get_reg_pair(opcode);
+        self.a = self.ram.read(address)?;
 
         Ok(())
     }
