@@ -13,6 +13,12 @@ pub enum Error {
 
     #[error("Program was halted by opcode")]
     SystemHalt,
+
+    #[error("ROM is {rom_size} bytes but there is only {space_left} after target address")]
+    RomSizeError {
+        rom_size: usize,
+        space_left: usize,
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

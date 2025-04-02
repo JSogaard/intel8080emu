@@ -51,6 +51,12 @@ impl Processor {
         }
     }
 
+    pub fn load_rom(&mut self, rom: &[u8], address: u16) -> Result<()> {
+        self.ram.load_rom(rom, address)?;
+
+        Ok(())
+    }
+
     pub fn execute(&mut self) -> Result<u32> {
         let opcode: u8 = self.ram.read(self.pc)?;
         let cycles: u32;
@@ -225,7 +231,7 @@ impl Processor {
     }
 
     // =====================================================================
-    //                          OPCODE METHODS
+    //                            OPCODE FUNCTIONS
     // =====================================================================
 
     fn mov_opcode(&mut self, opcode: u8) -> Result<u32> {
