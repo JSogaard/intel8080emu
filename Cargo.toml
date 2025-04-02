@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["intel8080_core"]
+members = ["intel8080_core", "spaceinvaders"]
 
 [profile.dev]
 debug = 2
