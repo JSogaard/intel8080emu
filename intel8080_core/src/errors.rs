@@ -2,10 +2,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Invalid memory address was accesed: {0}")]
+    #[error("Invalid memory address was accesed: {0:#X}")]
     InvalidMemory(usize),
 
-    #[error("Unknown opcode found: {0}")]
+    #[error("Unknown opcode found: {0:#02X}")]
     UnknownOpcode(u8),
 
     #[error("Failed to parse register: {0}")]

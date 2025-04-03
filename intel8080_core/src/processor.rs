@@ -1,6 +1,6 @@
 use crate::{
     errors::{Error, Result},
-    helpers::{auxiliary_add, bit_parity, bytes_to_16bit},
+    helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_to_16bit},
     memory::Memory,
 };
 
@@ -157,6 +157,20 @@ impl Processor {
                 self.pc += 1;
             }
 
+            // ADI opcode
+            0xC6 => {
+                let immediate = self.ram.read(self.pc + 1)?;
+                self.adi_opcode(immediate)?;
+                self.pc += 2;
+                cycles = 7;
+            }
+
+            // ADC opcodes
+            0x88..=0x8F => {
+                cycles = self.adc_opcode(opcode)?;
+                self.pc += 1;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -241,6 +255,14 @@ impl Processor {
         Ok((low_byte, high_byte))
     }
 
+    fn set_flags_add(&mut self, result_16: u16, result_8: u8, prev_a: u8, b: u8) {
+        self.flags.s = ((result_8 >> 7) & 1) == 1;
+        self.flags.z = result_8 == 0;
+        self.flags.p = bit_parity(result_8);
+        self.flags.cy = result_16 & 0xFF00 != 0;
+        self.flags.ac = auxiliary_add(prev_a, b);
+    }
+
     // =====================================================================
     //                            OPCODE FUNCTIONS
     // =====================================================================
@@ -250,15 +272,11 @@ impl Processor {
 
         self.set_dest_reg(opcode, source)?;
 
-        let cycles = match from_memory {
-            true => 7,
-            false => 5,
-        };
-        Ok(cycles)
+        if from_memory { Ok(7) } else { Ok(5) }
     }
 
-    fn mvi_opcode(&mut self, opcode: u8, data: u8) -> Result<()> {
-        self.set_dest_reg(opcode, data)?;
+    fn mvi_opcode(&mut self, opcode: u8, immediate: u8) -> Result<()> {
+        self.set_dest_reg(opcode, immediate)?;
 
         Ok(())
     }
@@ -326,16 +344,29 @@ impl Processor {
         let prev_a = self.a;
         self.a = (result & 0xFF) as u8;
 
-        self.flags.s = ((self.a >> 7) & 0x1) == 0x1;
-        self.flags.z = self.a == 0;
-        self.flags.p = bit_parity(self.a);
-        self.flags.cy = result & 0xFF00 != 0;
-        self.flags.ac = auxiliary_add(prev_a, source);
+        self.set_flags_add(result, self.a, prev_a, source);
 
-        if from_memory {
-            Ok(7)
-        } else {
-            Ok(5)
-        }
+        if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn adi_opcode(&mut self, immediate: u8) -> Result<()> {
+        let result = self.a as u16 + immediate as u16;
+        let prev_a = self.a;
+        self.a = (result & 0xFF) as u8;
+
+        self.set_flags_add(result, self.a, prev_a, immediate);
+
+        Ok(())
+    }
+
+    fn adc_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let result = self.a as u16 + source as u16 + self.flags.cy as u16;
+        let prev_a = self.a;
+        self.a = (result & 0xFF) as u8;
+
+        self.set_flags_add(result, self.a, prev_a, source);
+
+        if from_memory { Ok(7) } else { Ok(4) }
     }
 }
