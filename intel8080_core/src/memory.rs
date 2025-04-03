@@ -19,7 +19,7 @@ impl Memory {
         let address = (self.memory_mapper)(address);
 
         if rom.len() > self.size - address {
-            return Err(Error::RomSizeError {
+            return Err(Error::RomSize {
                 rom_size: rom.len(),
                 space_left: self.size - address,
             });
@@ -32,7 +32,7 @@ impl Memory {
     pub fn read(&self, address: u16) -> Result<u8> {
         let address = (self.memory_mapper)(address);
         if address >= self.size {
-            return Err(Error::InvalidMemoryError);
+            return Err(Error::InvalidMemory(address));
         }
         Ok(self.data[address])
     }
@@ -40,7 +40,7 @@ impl Memory {
     pub fn read_mut(&mut self, address: u16) -> Result<&mut u8> {
         let address = (self.memory_mapper)(address);
         if address >= self.size {
-            return Err(Error::InvalidMemoryError);
+            return Err(Error::InvalidMemory(address));
         }
         Ok(&mut self.data[address])
     }
@@ -48,7 +48,7 @@ impl Memory {
     pub fn write(&mut self, address: u16, value: u8) -> Result<()> {
         let address = (self.memory_mapper)(address);
         if address >= self.size {
-            return Err(Error::InvalidMemoryError);
+            return Err(Error::InvalidMemory(address));
         }
         self.data[address] = value;
 

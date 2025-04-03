@@ -1,6 +1,6 @@
 use crate::{
     errors::{Error, Result},
-    helpers::bytes_to_16bit,
+    helpers::{auxiliary_add, bit_parity, bytes_to_16bit},
     memory::Memory,
 };
 
@@ -53,11 +53,16 @@ impl Processor {
 
     pub fn load_rom(&mut self, rom: &[u8], address: u16) -> Result<()> {
         self.ram.load_rom(rom, address)?;
+        self.rom_loaded = true;
 
         Ok(())
     }
 
     pub fn execute(&mut self) -> Result<u32> {
+        if !self.rom_loaded {
+            return Err(Error::RomNotLoaded);
+        }
+
         let opcode: u8 = self.ram.read(self.pc)?;
         let cycles: u32;
 
@@ -72,7 +77,7 @@ impl Processor {
             0x76 => return Err(Error::SystemHalt),
 
             // MOV Register to register
-            0x40..0x80 => {
+            0x40..=0x7F => {
                 cycles = self.mov_opcode(opcode)?;
                 self.pc += 1;
             }
@@ -146,9 +151,15 @@ impl Processor {
                 cycles = 5;
             }
 
+            // ADD opcodes
+            0x80..=0x87 => {
+                cycles = self.add_opcode(opcode)?;
+                self.pc += 1;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
-                return Err(Error::UnimplementedOpcodeError(opcode));
+                return Err(Error::UnknownOpcode(opcode));
             }
         }
 
@@ -307,5 +318,24 @@ impl Processor {
         self.e = self.l;
         self.h = d_prev;
         self.l = e_prev;
+    }
+
+    fn add_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let result = self.a as u16 + source as u16;
+        let prev_a = self.a;
+        self.a = (result & 0xFF) as u8;
+
+        self.flags.s = ((self.a >> 7) & 0x1) == 0x1;
+        self.flags.z = self.a == 0;
+        self.flags.p = bit_parity(self.a);
+        self.flags.cy = result & 0xFF00 != 0;
+        self.flags.ac = auxiliary_add(prev_a, source);
+
+        if from_memory {
+            Ok(7)
+        } else {
+            Ok(5)
+        }
     }
 }
