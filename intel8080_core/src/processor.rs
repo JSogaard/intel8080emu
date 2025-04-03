@@ -171,6 +171,14 @@ impl Processor {
                 self.pc += 1;
             }
 
+            // ACI opcode
+            0xCE => {
+                let immediate = self.ram.read(self.pc + 1)?;
+                self.aci_opcode(immediate)?;
+                self.pc += 2;
+                cycles = 7;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -368,5 +376,15 @@ impl Processor {
         self.set_flags_add(result, self.a, prev_a, source);
 
         if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn aci_opcode(&mut self, immediate: u8) -> Result<()> {
+        let result = self.a as u16 + immediate as u16 + self.flags.cy as u16;
+        let prev_a = self.a;
+        self.a = (result & 0xFF) as u8;
+
+        self.set_flags_add(result, self.a, prev_a, immediate);
+
+        Ok(())
     }
 }
