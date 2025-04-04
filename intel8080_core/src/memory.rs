@@ -1,5 +1,6 @@
 use crate::errors::{Error, Result};
 
+#[derive(Clone, Debug)]
 pub struct Memory {
     data: Vec<u8>,
     size: usize,

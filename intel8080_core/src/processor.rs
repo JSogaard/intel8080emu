@@ -4,6 +4,7 @@ use crate::{
     memory::Memory,
 };
 
+#[derive(Clone, Debug)]
 pub struct Processor {
     a: u8,
     b: u8,
@@ -19,12 +20,13 @@ pub struct Processor {
     flags: Flags,
 }
 
+#[derive(Clone, Debug)]
 struct Flags {
-    pub s: bool,
-    pub z: bool,
-    pub p: bool,
-    pub cy: bool,
-    pub ac: bool,
+    s: bool,
+    z: bool,
+    p: bool,
+    cy: bool,
+    ac: bool,
 }
 
 impl Processor {
@@ -179,6 +181,12 @@ impl Processor {
                 cycles = 7;
             }
 
+            // Sub opcodes
+            0x90..=0x97 => {
+                cycles = self.sub_opcode(opcode)?;
+                self.pc += 1;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -271,6 +279,14 @@ impl Processor {
         self.flags.ac = auxiliary_add(prev_a, b);
     }
 
+    fn set_flags_sub(&mut self, result: u8, a: u8, b: u8) {
+        self.flags.s = ((result >> 7) & 1) == 1;
+        self.flags.z = result == 0;
+        self.flags.p = bit_parity(result);
+        self.flags.cy = a < b;
+        self.flags.ac = auxiliary_sub(a, b);
+    }
+
     // =====================================================================
     //                            OPCODE FUNCTIONS
     // =====================================================================
@@ -354,6 +370,7 @@ impl Processor {
 
         self.set_flags_add(result, self.a, prev_a, source);
 
+        // Cycles count depends on whether or not memory was accessed
         if from_memory { Ok(7) } else { Ok(4) }
     }
 
@@ -375,6 +392,7 @@ impl Processor {
 
         self.set_flags_add(result, self.a, prev_a, source);
 
+        // Cycles count depends on whether or not memory was accessed
         if from_memory { Ok(7) } else { Ok(4) }
     }
 
@@ -386,5 +404,16 @@ impl Processor {
         self.set_flags_add(result, self.a, prev_a, immediate);
 
         Ok(())
+    }
+
+    fn sub_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let prev_a = self.a;
+        self.a = self.a.wrapping_sub(source);
+
+        self.set_flags_sub(self.a, prev_a, source);
+
+        // Cycles count depends on whether or not memory was accessed
+        if from_memory { Ok(7) } else { Ok(4) }
     }
 }
