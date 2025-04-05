@@ -17,6 +17,7 @@ pub struct Processor {
     pc: u16,
     ram: Memory,
     rom_loaded: bool,
+    interrupts_enabled: bool,
     flags: Flags,
 }
 
@@ -43,6 +44,7 @@ impl Processor {
             pc: 0,
             ram: Memory::new(ram_size, memory_mapper),
             rom_loaded: false,
+            interrupts_enabled: false,
             flags: Flags {
                 s: false,
                 z: false,
@@ -184,6 +186,20 @@ impl Processor {
             // Sub opcodes
             0x90..=0x97 => {
                 cycles = self.sub_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // SUI opcode
+            0xD6 => {
+                let immediate = self.ram.read(self.pc + 1)?;
+                self.sui_opcode(immediate)?;
+                self.pc += 2;
+                cycles = 7;
+            }
+
+            // SBB Opcodes
+            0x98..=0x9F => {
+                cycles = self.sbb_opcode(opcode)?;
                 self.pc += 1;
             }
 
@@ -390,7 +406,7 @@ impl Processor {
         let prev_a = self.a;
         self.a = (result & 0xFF) as u8;
 
-        self.set_flags_add(result, self.a, prev_a, source);
+        self.set_flags_add(result, self.a, prev_a, source + self.flags.cy as u8);
 
         // Cycles count depends on whether or not memory was accessed
         if from_memory { Ok(7) } else { Ok(4) }
@@ -401,7 +417,7 @@ impl Processor {
         let prev_a = self.a;
         self.a = (result & 0xFF) as u8;
 
-        self.set_flags_add(result, self.a, prev_a, immediate);
+        self.set_flags_add(result, self.a, prev_a, immediate + self.flags.cy as u8);
 
         Ok(())
     }
@@ -414,6 +430,28 @@ impl Processor {
         self.set_flags_sub(self.a, prev_a, source);
 
         // Cycles count depends on whether or not memory was accessed
+        if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn sui_opcode(&mut self, immediate: u8) -> Result<()> {
+        let prev_a = self.a;
+        self.a = self.a.wrapping_sub(immediate);
+
+        self.set_flags_sub(self.a, prev_a, immediate);
+
+        Ok(())
+    }
+
+    fn sbb_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let prev_a = self.a;
+        self.a = self
+            .a
+            .wrapping_sub(source)
+            .wrapping_sub(self.flags.cy as u8);
+
+        self.set_flags_sub(self.a, prev_a, source + self.flags.cy as u8);
+
         if from_memory { Ok(7) } else { Ok(4) }
     }
 }
