@@ -4,6 +4,8 @@ use crate::{
     memory::Memory,
 };
 
+use std::cmp::max;
+
 #[derive(Clone, Debug)]
 pub struct Processor {
     a: u8,
@@ -15,9 +17,11 @@ pub struct Processor {
     l: u8,
     sp: u16,
     pc: u16,
-    ram: Memory,
+
     rom_loaded: bool,
     interrupts_enabled: bool,
+
+    ram: Memory,
     flags: Flags,
 }
 
@@ -88,10 +92,9 @@ impl Processor {
 
             // MVI opcodes
             0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E => {
-                let data = self.ram.read(self.pc + 1)?;
-                self.mvi_opcode(opcode, data)?;
+                let data = self.get_next_byte()?;
+                cycles = self.mvi_opcode(opcode, data)?;
                 self.pc += 2;
-                cycles = 7;
             }
 
             // LXI opcodes
@@ -163,7 +166,7 @@ impl Processor {
 
             // ADI opcode
             0xC6 => {
-                let immediate = self.ram.read(self.pc + 1)?;
+                let immediate = self.get_next_byte()?;
                 self.adi_opcode(immediate)?;
                 self.pc += 2;
                 cycles = 7;
@@ -177,7 +180,7 @@ impl Processor {
 
             // ACI opcode
             0xCE => {
-                let immediate = self.ram.read(self.pc + 1)?;
+                let immediate = self.get_next_byte()?;
                 self.aci_opcode(immediate)?;
                 self.pc += 2;
                 cycles = 7;
@@ -191,7 +194,7 @@ impl Processor {
 
             // SUI opcode
             0xD6 => {
-                let immediate = self.ram.read(self.pc + 1)?;
+                let immediate = self.get_next_byte()?;
                 self.sui_opcode(immediate)?;
                 self.pc += 2;
                 cycles = 7;
@@ -203,6 +206,40 @@ impl Processor {
                 self.pc += 1;
             }
 
+            // SBI opcode
+            0xDE => {
+                let immediate = self.get_next_byte()?;
+                self.sbi_opcode(immediate)?;
+                self.pc += 1;
+                cycles = 7;
+            }
+
+            // INR opcodes
+            0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x34 | 0x3C => {
+                cycles = self.inr_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // DCR opcodes
+            0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x35 | 0x3D => {
+                cycles = self.dcr_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // INX opcodes
+            0x03 | 0x13 | 0x23 | 0x33 => {
+                self.inx_opcode(opcode);
+                self.pc += 1;
+                cycles = 5;
+            }
+
+            // DCX opcodes
+            0x0B | 0x1B | 0x2B | 0x3B => {
+                self.dcx_opcode(opcode);
+                self.pc += 1;
+                cycles = 5;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -212,6 +249,10 @@ impl Processor {
         Ok(cycles)
     }
 
+    //  ====================================================================
+    //                          HELPER FUNCTIONS
+    //  ====================================================================
+    
     fn get_source_reg(&mut self, opcode: u8) -> Result<(u8, bool)> {
         let mut from_memory = false;
         let source = match opcode & 0b111 {
@@ -232,7 +273,9 @@ impl Processor {
         Ok((source, from_memory))
     }
 
-    fn set_dest_reg(&mut self, opcode: u8, data: u8) -> Result<()> {
+    fn get_dest_reg(&mut self, opcode: u8) -> Result<(&mut u8, bool)> {
+        let mut from_memory = false;
+
         let destination: &mut u8 = match (opcode >> 3) & 0b111 {
             0b111 => &mut self.a,
             0b000 => &mut self.b,
@@ -241,12 +284,13 @@ impl Processor {
             0b011 => &mut self.e,
             0b100 => &mut self.h,
             0b101 => &mut self.l,
-            0b110 => self.ram.read_mut(self.get_hl())?,
+            0b110 => {
+                from_memory = true;
+                self.ram.read_mut(self.get_hl())?
+            }
             _ => panic!("Failed to parse register: {:#b}", (opcode >> 3) & 0b111),
         };
-        *destination = data;
-
-        Ok(())
+        Ok((destination, from_memory))
     }
 
     fn set_reg_pair(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
@@ -281,6 +325,10 @@ impl Processor {
         bytes_to_16bit(self.l, self.h)
     }
 
+    fn get_next_byte(&self) -> Result<u8> {
+        self.ram.read(self.pc + 1)
+    }
+
     fn get_next_16bit(&self) -> Result<(u8, u8)> {
         let low_byte = self.ram.read(self.pc + 1)?;
         let high_byte = self.ram.read(self.pc + 2)?;
@@ -308,17 +356,23 @@ impl Processor {
     // =====================================================================
 
     fn mov_opcode(&mut self, opcode: u8) -> Result<u32> {
-        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let (source, source_from_memory) = self.get_source_reg(opcode)?;
 
-        self.set_dest_reg(opcode, source)?;
+        let (destination, dest_to_memory) = self.get_dest_reg(opcode)?;
+        *destination = source;
 
-        if from_memory { Ok(7) } else { Ok(5) }
+        if source_from_memory || dest_to_memory {
+            Ok(7)
+        } else {
+            Ok(5)
+        }
     }
 
-    fn mvi_opcode(&mut self, opcode: u8, immediate: u8) -> Result<()> {
-        self.set_dest_reg(opcode, immediate)?;
+    fn mvi_opcode(&mut self, opcode: u8, immediate: u8) -> Result<u32> {
+        let (register, to_memory) = self.get_dest_reg(opcode)?;
+        *register = immediate;
 
-        Ok(())
+        if to_memory { Ok(10) } else { Ok(7) }
     }
 
     fn lxi_opcode(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
@@ -406,7 +460,12 @@ impl Processor {
         let prev_a = self.a;
         self.a = (result & 0xFF) as u8;
 
-        self.set_flags_add(result, self.a, prev_a, source + self.flags.cy as u8);
+        self.set_flags_add(
+            result,
+            self.a,
+            prev_a,
+            max(source + self.flags.cy as u8, 255),
+        );
 
         // Cycles count depends on whether or not memory was accessed
         if from_memory { Ok(7) } else { Ok(4) }
@@ -417,7 +476,12 @@ impl Processor {
         let prev_a = self.a;
         self.a = (result & 0xFF) as u8;
 
-        self.set_flags_add(result, self.a, prev_a, immediate + self.flags.cy as u8);
+        self.set_flags_add(
+            result,
+            self.a,
+            prev_a,
+            max(immediate + self.flags.cy as u8, 255),
+        );
 
         Ok(())
     }
@@ -450,8 +514,68 @@ impl Processor {
             .wrapping_sub(source)
             .wrapping_sub(self.flags.cy as u8);
 
-        self.set_flags_sub(self.a, prev_a, source + self.flags.cy as u8);
+        self.set_flags_sub(self.a, prev_a, max(source + self.flags.cy as u8, 255));
 
         if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn sbi_opcode(&mut self, immediate: u8) -> Result<()> {
+        let prev_a = self.a;
+        self.a = self
+            .a
+            .wrapping_sub(immediate)
+            .wrapping_sub(self.flags.cy as u8);
+
+        self.set_flags_sub(self.a, prev_a, max(immediate + self.flags.cy as u8, 255));
+
+        Ok(())
+    }
+
+    fn inr_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (register, to_memory) = self.get_dest_reg(opcode)?;
+
+        let prev_val = *register;
+        let result = register.wrapping_add(1);
+        *register = result;
+
+        self.flags.s = (result >> 7) & 1 == 1;
+        self.flags.z = result == 0;
+        self.flags.p = bit_parity(result);
+        self.flags.ac = auxiliary_add(prev_val, 1);
+
+        if to_memory { Ok(10) } else { Ok(5) }
+    }
+
+    fn dcr_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (register, to_memory) = self.get_dest_reg(opcode)?;
+
+        let prev_val = *register;
+        let result = register.wrapping_add(1);
+        *register = result;
+
+        self.flags.s = (result >> 7) & 1 == 1;
+        self.flags.z = result == 0;
+        self.flags.p = bit_parity(result);
+        self.flags.ac = auxiliary_sub(prev_val, 1);
+
+        if to_memory { Ok(10) } else { Ok(5) }
+    }
+
+    fn inx_opcode(&mut self, opcode: u8) {
+        let register = self.get_reg_pair(opcode);
+        let result = register.wrapping_add(1);
+        
+        let low_byte = result as u8;
+        let high_byte = (result >> 8) as u8;
+        self.set_reg_pair(opcode, low_byte, high_byte);
+    }
+
+    fn dcx_opcode(&mut self, opcode: u8) {
+        let register = self.get_reg_pair(opcode);
+        let result = register.wrapping_sub(1);
+
+        let low_byte = result as u8;
+        let high_byte = (result >> 8) as u8;
+        self.set_reg_pair(opcode, low_byte, high_byte);
     }
 }
