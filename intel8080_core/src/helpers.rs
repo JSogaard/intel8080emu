@@ -2,6 +2,13 @@ pub fn bytes_to_16bit(low_byte: u8, high_byte: u8) -> u16 {
     ((high_byte as u16) << 8) | low_byte as u16
 }
 
+pub fn bytes_from_16bit(data: u16) -> (u8, u8) {
+    let low_byte = data as u8;
+    let high_byte = (data >> 8) as u8;
+
+    (low_byte, high_byte)
+}
+
 /// Checks if the number of 1s in byte is even
 pub fn bit_parity(byte: u8) -> bool {
     let mut byte = byte;

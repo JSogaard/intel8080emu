@@ -1,6 +1,6 @@
 use crate::{
     errors::{Error, Result},
-    helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_to_16bit},
+    helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_from_16bit, bytes_to_16bit},
     memory::Memory,
 };
 
@@ -240,6 +240,20 @@ impl Processor {
                 cycles = 5;
             }
 
+            // DAD opcodes
+            0x09 | 0x19 | 0x29 | 0x39 => {
+                self.dad_opcode(opcode);
+                self.pc += 1;
+                cycles = 10;
+            }
+
+            // DAA opcode
+            0x27 => {
+                self.daa_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -250,7 +264,7 @@ impl Processor {
     }
 
     //  ====================================================================
-    //                          HELPER FUNCTIONS
+    //                           HELPER FUNCTIONS
     //  ====================================================================
     
     fn get_source_reg(&mut self, opcode: u8) -> Result<(u8, bool)> {
@@ -577,5 +591,37 @@ impl Processor {
         let low_byte = result as u8;
         let high_byte = (result >> 8) as u8;
         self.set_reg_pair(opcode, low_byte, high_byte);
+    }
+
+    fn dad_opcode(&mut self, opcode: u8) {
+        let source = self.get_reg_pair(opcode) as u32;
+        let destination = bytes_to_16bit(self.l, self.h) as u32;
+        
+        let result = destination.wrapping_add(source);
+        (self.l, self.h) = bytes_from_16bit(result as u16);
+
+        self.flags.cy = result > 0xFFFF;
+    }
+
+    fn daa_opcode(&mut self) {
+        let mut acc = self.a as u16;
+        
+        let overflow = (acc & 0xF) > 9;
+        if overflow || self.flags.ac {
+            self.flags.ac = overflow;
+            acc += 0x6;
+        }
+        
+        let overflow = ((acc & 0xF0) >> 4) > 9;
+        if overflow || self.flags.cy {
+            self.flags.cy = overflow;
+            acc += 0x60;
+        }
+
+        self.a = acc as u8;
+        
+        self.flags.s = (self.a >> 7) & 1 == 1;
+        self.flags.z = self.a == 0;
+        self.flags.p = bit_parity(self.a);
     }
 }
