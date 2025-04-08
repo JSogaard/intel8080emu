@@ -4,11 +4,11 @@ use crate::errors::{Error, Result};
 pub struct Memory {
     data: Vec<u8>,
     size: usize,
-    memory_mapper: fn(u16) -> usize,
+    memory_mapper: fn(u16) -> u16,
 }
 
 impl Memory {
-    pub fn new(size: usize, memory_mapper: fn(u16) -> usize) -> Self {
+    pub fn new(size: usize, memory_mapper: fn(u16) -> u16) -> Self {
         Self {
             data: vec![0; size],
             size,
@@ -17,7 +17,7 @@ impl Memory {
     }
 
     pub fn load_rom(&mut self, rom: &[u8], address: u16) -> Result<()> {
-        let address = (self.memory_mapper)(address);
+        let address = (self.memory_mapper)(address) as usize;
 
         if rom.len() > self.size - address {
             return Err(Error::RomSize {
@@ -31,7 +31,7 @@ impl Memory {
     }
 
     pub fn read(&self, address: u16) -> Result<u8> {
-        let address = (self.memory_mapper)(address);
+        let address = (self.memory_mapper)(address) as usize;
         if address >= self.size {
             return Err(Error::InvalidMemory(address));
         }
@@ -39,7 +39,7 @@ impl Memory {
     }
 
     pub fn read_mut(&mut self, address: u16) -> Result<&mut u8> {
-        let address = (self.memory_mapper)(address);
+        let address = (self.memory_mapper)(address) as usize;
         if address >= self.size {
             return Err(Error::InvalidMemory(address));
         }
@@ -47,7 +47,7 @@ impl Memory {
     }
 
     pub fn write(&mut self, address: u16, value: u8) -> Result<()> {
-        let address = (self.memory_mapper)(address);
+        let address = (self.memory_mapper)(address) as usize;
         if address >= self.size {
             return Err(Error::InvalidMemory(address));
         }

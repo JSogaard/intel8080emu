@@ -35,7 +35,7 @@ struct Flags {
 }
 
 impl Processor {
-    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> usize) -> Self {
+    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> u16) -> Self {
         Self {
             a: 0,
             b: 0,
@@ -254,6 +254,12 @@ impl Processor {
                 cycles = 4;
             }
 
+            // ANA opcodes
+            0xA0..=0xA7 => {
+                cycles = self.ana_opcode(opcode)?;
+                self.pc += 1;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -266,7 +272,7 @@ impl Processor {
     //  ====================================================================
     //                           HELPER FUNCTIONS
     //  ====================================================================
-    
+
     fn get_source_reg(&mut self, opcode: u8) -> Result<(u8, bool)> {
         let mut from_memory = false;
         let source = match opcode & 0b111 {
@@ -350,7 +356,7 @@ impl Processor {
     }
 
     fn set_flags_add(&mut self, result_16: u16, result_8: u8, prev_a: u8, b: u8) {
-        self.flags.s = ((result_8 >> 7) & 1) == 1;
+        self.flags.s = ((result_8 >> 7) & 1) != 0;
         self.flags.z = result_8 == 0;
         self.flags.p = bit_parity(result_8);
         self.flags.cy = result_16 & 0xFF00 != 0;
@@ -358,7 +364,7 @@ impl Processor {
     }
 
     fn set_flags_sub(&mut self, result: u8, a: u8, b: u8) {
-        self.flags.s = ((result >> 7) & 1) == 1;
+        self.flags.s = ((result >> 7) & 1) != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.cy = a < b;
@@ -552,7 +558,7 @@ impl Processor {
         let result = register.wrapping_add(1);
         *register = result;
 
-        self.flags.s = (result >> 7) & 1 == 1;
+        self.flags.s = (result >> 7) & 1 != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.ac = auxiliary_add(prev_val, 1);
@@ -567,7 +573,7 @@ impl Processor {
         let result = register.wrapping_add(1);
         *register = result;
 
-        self.flags.s = (result >> 7) & 1 == 1;
+        self.flags.s = (result >> 7) & 1 != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.ac = auxiliary_sub(prev_val, 1);
@@ -578,7 +584,7 @@ impl Processor {
     fn inx_opcode(&mut self, opcode: u8) {
         let register = self.get_reg_pair(opcode);
         let result = register.wrapping_add(1);
-        
+
         let low_byte = result as u8;
         let high_byte = (result >> 8) as u8;
         self.set_reg_pair(opcode, low_byte, high_byte);
@@ -596,7 +602,7 @@ impl Processor {
     fn dad_opcode(&mut self, opcode: u8) {
         let source = self.get_reg_pair(opcode) as u32;
         let destination = bytes_to_16bit(self.l, self.h) as u32;
-        
+
         let result = destination.wrapping_add(source);
         (self.l, self.h) = bytes_from_16bit(result as u16);
 
@@ -605,13 +611,13 @@ impl Processor {
 
     fn daa_opcode(&mut self) {
         let mut acc = self.a as u16;
-        
+
         let overflow = (acc & 0xF) > 9;
         if overflow || self.flags.ac {
             self.flags.ac = overflow;
             acc += 0x6;
         }
-        
+
         let overflow = ((acc & 0xF0) >> 4) > 9;
         if overflow || self.flags.cy {
             self.flags.cy = overflow;
@@ -619,9 +625,22 @@ impl Processor {
         }
 
         self.a = acc as u8;
-        
-        self.flags.s = (self.a >> 7) & 1 == 1;
+
+        self.flags.s = (self.a >> 7) & 1 != 0;
         self.flags.z = self.a == 0;
         self.flags.p = bit_parity(self.a);
+    }
+
+    fn ana_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        self.a &= source;
+
+        self.flags.s = (self.a >> 7) & 1 != 0;
+        self.flags.z = self.a == 0;
+        self.flags.p = bit_parity(self.a);
+        self.flags.cy = false;
+        self.flags.ac = ((self.a >> 3) & 1) | ((source >> 3) & 1) != 0;
+
+        if from_memory { Ok(7) } else { Ok(4) }
     }
 }
