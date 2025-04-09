@@ -260,6 +260,42 @@ impl Processor {
                 self.pc += 1;
             }
 
+            // ANI opcode
+            0xE6 => {
+                let immediate = self.get_next_byte()?;
+                self.ani_opcode(immediate);
+                self.pc += 2;
+                cycles = 7;
+            }
+
+            // ORA opcodes
+            0xB0..=0xB7 => {
+                cycles = self.ana_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // ORI opcode
+            0xF6 => {
+                let immediate = self.get_next_byte()?;
+                self.ori_opcode(immediate);
+                self.pc += 2;
+                cycles = 7;
+            }
+
+            // XRA opcodes
+            0xA8..=0xAF => {
+                cycles = self.xra_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // XRI opcode
+            0xEE => {
+                let immediate = self.get_next_byte()?;
+                self.xri_opcode(immediate);
+                self.pc += 2;
+                cycles = 7;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -369,6 +405,22 @@ impl Processor {
         self.flags.p = bit_parity(result);
         self.flags.cy = a < b;
         self.flags.ac = auxiliary_sub(a, b);
+    }
+
+    fn set_flags_and(&mut self, operand: u8) {
+        self.flags.s = (self.a >> 7) & 1 != 0;
+        self.flags.z = self.a == 0;
+        self.flags.p = bit_parity(self.a);
+        self.flags.cy = false;
+        self.flags.ac = ((self.a >> 3) & 1) | ((operand >> 3) & 1) != 0;
+    }
+
+    fn set_flags_logical(&mut self, operand: u8) {
+        self.flags.s = (self.a >> 7) & 1 != 0;
+        self.flags.z = self.a == 0;
+        self.flags.p = bit_parity(self.a);
+        self.flags.cy = false;
+        self.flags.ac = false;
     }
 
     // =====================================================================
@@ -635,12 +687,41 @@ impl Processor {
         let (source, from_memory) = self.get_source_reg(opcode)?;
         self.a &= source;
 
-        self.flags.s = (self.a >> 7) & 1 != 0;
-        self.flags.z = self.a == 0;
-        self.flags.p = bit_parity(self.a);
-        self.flags.cy = false;
-        self.flags.ac = ((self.a >> 3) & 1) | ((source >> 3) & 1) != 0;
+        self.set_flags_and(source);
 
         if from_memory { Ok(7) } else { Ok(4) }
+    }
+    
+    fn ani_opcode(&mut self, immediate: u8) {
+        self.a &= immediate;
+        self.set_flags_and(immediate);
+    }
+
+    fn ora_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        self.a |= source;
+
+        self.set_flags_logical(source);
+
+        if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn ori_opcode(&mut self, immediate: u8) {
+        self.a |= immediate;
+        self.set_flags_logical(immediate);
+    }
+
+    fn xra_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        self.a ^= source;
+
+        self.set_flags_logical(source);
+
+        if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn xri_opcode(&mut self, immediate: u8) {
+        self.a ^= immediate;
+        self.set_flags_logical(immediate);
     }
 }
