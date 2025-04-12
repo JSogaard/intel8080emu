@@ -324,6 +324,62 @@ impl Processor {
                 cycles = 4;
             }
 
+            // RAL opcode
+            0x17 => {
+                self.ral_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // RAR opcode
+            0x1F => {
+                self.rar_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // CMA opcode
+            0x2F => {
+                self.cma_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // CMC opcode
+            0x3F => {
+                self.cmc_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // STC opcode
+            0x37 => {
+                self.stc_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // JMP opcode
+            0xC3 => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.jmp_opcode(low_byte, high_byte);
+                cycles = 10;
+            }
+
+            // JC, JNC, JZ, JNZ, JM, JP, JPE, JPO (JCCC) opcodes
+            0xC2 | 0xCA | 0xD2 | 0xDA | 0xE2 | 0xEA | 0xF2 | 0xF3 => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.jccc_opcode(opcode, low_byte, high_byte);
+                cycles = 10;
+            }
+
+            // CALL opcode
+            0xCD => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                self.call_opcode(low_byte, high_byte)?;
+                cycles = 17;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -383,7 +439,7 @@ impl Processor {
             0b01 => (self.d, self.e) = (high_byte, low_byte),
             0b10 => (self.h, self.l) = (high_byte, low_byte),
             0b11 => self.sp = bytes_to_16bit(low_byte, high_byte),
-            _ => panic!("Failed to parse registerpair: {:#b}", (opcode >> 4) & 0b11),
+            _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
         }
     }
 
@@ -393,7 +449,21 @@ impl Processor {
             0b01 => bytes_to_16bit(self.e, self.d),
             0b10 => bytes_to_16bit(self.l, self.h),
             0b11 => self.sp,
-            _ => panic!("Failed to parse registerpair: {:#b}", (opcode >> 4) & 0b11),
+            _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
+        }
+    }
+    
+    fn get_conditional(&mut self, opcode: u8) -> bool {
+        match (opcode >> 3) & 0b111 {
+            0b000 => !self.flags.z,
+            0b001 => self.flags.z,
+            0b010 => !self.flags.cy,
+            0b011 => self.flags.cy,
+            0b100 => !self.flags.p,
+            0b101 => self.flags.p,
+            0b110 => !self.flags.s,
+            0b111 => self.flags.s,
+            _ => panic!("Failed to parse conditional: {:#b}", (opcode >> 3) & 0b111),
         }
     }
 
@@ -449,6 +519,22 @@ impl Processor {
         self.flags.p = bit_parity(result);
         self.flags.cy = false;
         self.flags.ac = false;
+    }
+
+    fn push_16bit(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        self.ram.write(self.sp - 1, high_byte)?;
+        self.ram.write(self.sp - 2, low_byte)?;
+        self.sp -= 2;
+
+        Ok(())
+    }
+
+    fn pop_16bit(&mut self) -> Result<(u8, u8)> {
+        let low_byte = self.ram.read(self.sp)?;
+        let high_byte = self.ram.read(self.sp + 1)?;
+        self.sp += 2;
+
+        Ok((low_byte, high_byte))
     }
 
     // =====================================================================
@@ -775,5 +861,56 @@ impl Processor {
     fn rrc_opcode(&mut self) {
         self.flags.cy = self.a & 1 != 0;
         self.a = self.a.rotate_right(1);
+    }
+
+    fn ral_opcode(&mut self) {
+        let prev_cy = self.flags.cy as u8;
+        self.flags.cy = self.a & 0x80 != 0;
+        self.a <<= 1;
+        self.a |= prev_cy;
+    }
+
+    fn rar_opcode(&mut self) {
+        let prev_cy = self.flags.cy as u8;
+        self.flags.cy = self.a & 1 != 0;
+        self.a >>= 1;
+        self.a |= prev_cy << 7;
+    }
+
+    fn cma_opcode(&mut self) {
+        self.a = !self.a;
+    }
+
+    fn cmc_opcode(&mut self) {
+        self.flags.cy = !self.flags.cy;
+    }
+
+    fn stc_opcode(&mut self) {
+        self.flags.cy = true;
+    }
+
+    fn jmp_opcode(&mut self, low_byte: u8, high_byte: u8) {
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.pc = address;
+    }
+
+    fn jccc_opcode(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
+        if self.get_conditional(opcode) {
+            let address = bytes_to_16bit(low_byte, high_byte);
+            self.pc = address;
+        } else {
+            self.pc += 3;
+        }
+    }
+
+    fn call_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
+        self.pc += 3;
+        let (low_return, high_return) = bytes_from_16bit(self.pc);
+        self.push_16bit(low_return, high_return)?;
+        
+        let address = bytes_to_16bit(low_byte, high_byte);
+        self.pc = address;
+
+        Ok(())
     }
 }
