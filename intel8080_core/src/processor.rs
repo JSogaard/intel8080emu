@@ -296,6 +296,34 @@ impl Processor {
                 cycles = 7;
             }
 
+            // CMP opcodes
+            0xB8..=0xBF => {
+                cycles = self.cmp_opcode(opcode)?;
+                self.pc += 1;
+            }
+
+            // CPI opcode
+            0xFE => {
+                let immediate = self.get_next_byte()?;
+                self.cpi_opcode(immediate);
+                self.pc += 2;
+                cycles = 7;
+            }
+
+            // RLC opcode
+            0x07 => {
+                self.rlc_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // RRC opcode
+            0x0F => {
+                self.rrc_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -392,7 +420,7 @@ impl Processor {
     }
 
     fn set_flags_add(&mut self, result_16: u16, result_8: u8, prev_a: u8, b: u8) {
-        self.flags.s = ((result_8 >> 7) & 1) != 0;
+        self.flags.s = result_8 & 0x80 != 0;
         self.flags.z = result_8 == 0;
         self.flags.p = bit_parity(result_8);
         self.flags.cy = result_16 & 0xFF00 != 0;
@@ -400,7 +428,7 @@ impl Processor {
     }
 
     fn set_flags_sub(&mut self, result: u8, a: u8, b: u8) {
-        self.flags.s = ((result >> 7) & 1) != 0;
+        self.flags.s = result & 0x80 != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.cy = a < b;
@@ -408,17 +436,17 @@ impl Processor {
     }
 
     fn set_flags_and(&mut self, operand: u8) {
-        self.flags.s = (self.a >> 7) & 1 != 0;
+        self.flags.s = self.a & 0x80 != 0;
         self.flags.z = self.a == 0;
         self.flags.p = bit_parity(self.a);
         self.flags.cy = false;
         self.flags.ac = ((self.a >> 3) & 1) | ((operand >> 3) & 1) != 0;
     }
 
-    fn set_flags_logical(&mut self, operand: u8) {
-        self.flags.s = (self.a >> 7) & 1 != 0;
-        self.flags.z = self.a == 0;
-        self.flags.p = bit_parity(self.a);
+    fn set_flags_logical(&mut self, result: u8) {
+        self.flags.s = result & 0x80 != 0;
+        self.flags.z = result == 0;
+        self.flags.p = bit_parity(result);
         self.flags.cy = false;
         self.flags.ac = false;
     }
@@ -610,7 +638,7 @@ impl Processor {
         let result = register.wrapping_add(1);
         *register = result;
 
-        self.flags.s = (result >> 7) & 1 != 0;
+        self.flags.s = result & 0x80 != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.ac = auxiliary_add(prev_val, 1);
@@ -625,7 +653,7 @@ impl Processor {
         let result = register.wrapping_add(1);
         *register = result;
 
-        self.flags.s = (result >> 7) & 1 != 0;
+        self.flags.s = result & 0x80 != 0;
         self.flags.z = result == 0;
         self.flags.p = bit_parity(result);
         self.flags.ac = auxiliary_sub(prev_val, 1);
@@ -678,7 +706,7 @@ impl Processor {
 
         self.a = acc as u8;
 
-        self.flags.s = (self.a >> 7) & 1 != 0;
+        self.flags.s = self.a & 0x80 != 0;
         self.flags.z = self.a == 0;
         self.flags.p = bit_parity(self.a);
     }
@@ -691,7 +719,7 @@ impl Processor {
 
         if from_memory { Ok(7) } else { Ok(4) }
     }
-    
+
     fn ani_opcode(&mut self, immediate: u8) {
         self.a &= immediate;
         self.set_flags_and(immediate);
@@ -701,27 +729,51 @@ impl Processor {
         let (source, from_memory) = self.get_source_reg(opcode)?;
         self.a |= source;
 
-        self.set_flags_logical(source);
+        self.set_flags_logical(self.a);
 
         if from_memory { Ok(7) } else { Ok(4) }
     }
 
     fn ori_opcode(&mut self, immediate: u8) {
         self.a |= immediate;
-        self.set_flags_logical(immediate);
+        self.set_flags_logical(self.a);
     }
 
     fn xra_opcode(&mut self, opcode: u8) -> Result<u32> {
         let (source, from_memory) = self.get_source_reg(opcode)?;
         self.a ^= source;
 
-        self.set_flags_logical(source);
+        self.set_flags_logical(self.a);
 
         if from_memory { Ok(7) } else { Ok(4) }
     }
 
     fn xri_opcode(&mut self, immediate: u8) {
         self.a ^= immediate;
-        self.set_flags_logical(immediate);
+        self.set_flags_logical(self.a);
+    }
+
+    fn cmp_opcode(&mut self, opcode: u8) -> Result<u32> {
+        let (source, from_memory) = self.get_source_reg(opcode)?;
+        let result = self.a.wrapping_sub(source);
+
+        self.set_flags_sub(result, self.a, source);
+
+        if from_memory { Ok(7) } else { Ok(4) }
+    }
+
+    fn cpi_opcode(&mut self, immediate: u8) {
+        let result = self.a.wrapping_sub(immediate);
+        self.set_flags_sub(result, self.a, immediate);
+    }
+
+    fn rlc_opcode(&mut self) {
+        self.flags.cy = self.a & 0x80 != 0;
+        self.a = self.a.rotate_left(1);
+    }
+
+    fn rrc_opcode(&mut self) {
+        self.flags.cy = self.a & 1 != 0;
+        self.a = self.a.rotate_right(1);
     }
 }
