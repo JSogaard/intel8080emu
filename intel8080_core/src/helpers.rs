@@ -1,8 +1,8 @@
-pub fn bytes_to_16bit(low_byte: u8, high_byte: u8) -> u16 {
+pub fn bytes_to_word(low_byte: u8, high_byte: u8) -> u16 {
     ((high_byte as u16) << 8) | low_byte as u16
 }
 
-pub fn bytes_from_16bit(data: u16) -> (u8, u8) {
+pub fn word_to_bytes(data: u16) -> (u8, u8) {
     let low_byte = data as u8;
     let high_byte = (data >> 8) as u8;
 
@@ -13,7 +13,7 @@ pub fn bytes_from_16bit(data: u16) -> (u8, u8) {
 pub fn bit_parity(byte: u8) -> bool {
     let mut byte = byte;
 
-    let mut shift = 4;
+    let mut shift: u8 = 4;
     while shift > 0 {
         let mask = 0xFF >> (8 - shift);
         byte = (byte & mask) ^ (byte >> shift);

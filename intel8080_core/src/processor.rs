@@ -1,6 +1,6 @@
 use crate::{
     errors::{Error, Result},
-    helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_from_16bit, bytes_to_16bit},
+    helpers::{auxiliary_add, auxiliary_sub, bit_parity, word_to_bytes, bytes_to_word},
     memory::Memory,
 };
 
@@ -380,6 +380,12 @@ impl Processor {
                 cycles = 17;
             }
 
+            // CC, CNC, CZ, CNZ, CM, CP, CPE, CPO (CCCC) opcodes
+            0xC4 | 0xCC | 0xD4 | 0xDC | 0xE4 | 0xEC | 0xF4 | 0xFC => {
+                let (low_byte, high_byte) = self.get_next_16bit()?;
+                cycles = self.cccc_opcode(opcode, low_byte, high_byte)?;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -438,16 +444,16 @@ impl Processor {
             0b00 => (self.b, self.c) = (high_byte, low_byte),
             0b01 => (self.d, self.e) = (high_byte, low_byte),
             0b10 => (self.h, self.l) = (high_byte, low_byte),
-            0b11 => self.sp = bytes_to_16bit(low_byte, high_byte),
+            0b11 => self.sp = bytes_to_word(low_byte, high_byte),
             _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
         }
     }
 
     fn get_reg_pair(&self, opcode: u8) -> u16 {
         match (opcode >> 4) & 0b11 {
-            0b00 => bytes_to_16bit(self.c, self.b),
-            0b01 => bytes_to_16bit(self.e, self.d),
-            0b10 => bytes_to_16bit(self.l, self.h),
+            0b00 => bytes_to_word(self.c, self.b),
+            0b01 => bytes_to_word(self.e, self.d),
+            0b10 => bytes_to_word(self.l, self.h),
             0b11 => self.sp,
             _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
         }
@@ -468,15 +474,15 @@ impl Processor {
     }
 
     fn get_bc(&self) -> u16 {
-        bytes_to_16bit(self.c, self.b)
+        bytes_to_word(self.c, self.b)
     }
 
     fn get_de(&self) -> u16 {
-        bytes_to_16bit(self.e, self.d)
+        bytes_to_word(self.e, self.d)
     }
 
     fn get_hl(&self) -> u16 {
-        bytes_to_16bit(self.l, self.h)
+        bytes_to_word(self.l, self.h)
     }
 
     fn get_next_byte(&self) -> Result<u8> {
@@ -566,21 +572,21 @@ impl Processor {
     }
 
     fn lda_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.a = self.ram.read(address)?;
 
         Ok(())
     }
 
     fn sta_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.ram.write(address, self.a)?;
 
         Ok(())
     }
 
     fn lhld_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.l = self.ram.read(address)?;
         self.h = self.ram.read(address + 1)?;
 
@@ -588,7 +594,7 @@ impl Processor {
     }
 
     fn shld_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.ram.write(address, self.l)?;
         self.ram.write(address + 1, self.h)?;
 
@@ -767,10 +773,10 @@ impl Processor {
 
     fn dad_opcode(&mut self, opcode: u8) {
         let source = self.get_reg_pair(opcode) as u32;
-        let destination = bytes_to_16bit(self.l, self.h) as u32;
+        let destination = bytes_to_word(self.l, self.h) as u32;
 
         let result = destination.wrapping_add(source);
-        (self.l, self.h) = bytes_from_16bit(result as u16);
+        (self.l, self.h) = word_to_bytes(result as u16);
 
         self.flags.cy = result > 0xFFFF;
     }
@@ -890,13 +896,13 @@ impl Processor {
     }
 
     fn jmp_opcode(&mut self, low_byte: u8, high_byte: u8) {
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.pc = address;
     }
 
     fn jccc_opcode(&mut self, opcode: u8, low_byte: u8, high_byte: u8) {
         if self.get_conditional(opcode) {
-            let address = bytes_to_16bit(low_byte, high_byte);
+            let address = bytes_to_word(low_byte, high_byte);
             self.pc = address;
         } else {
             self.pc += 3;
@@ -905,12 +911,24 @@ impl Processor {
 
     fn call_opcode(&mut self, low_byte: u8, high_byte: u8) -> Result<()> {
         self.pc += 3;
-        let (low_return, high_return) = bytes_from_16bit(self.pc);
+        let (low_return, high_return) = word_to_bytes(self.pc);
         self.push_16bit(low_return, high_return)?;
         
-        let address = bytes_to_16bit(low_byte, high_byte);
+        let address = bytes_to_word(low_byte, high_byte);
         self.pc = address;
 
         Ok(())
+    }
+
+    fn cccc_opcode(&mut self, opcode: u8, low_byte: u8, high_byte: u8) -> Result<u32> {
+        if self.get_conditional(opcode) {
+            self.call_opcode(low_byte, high_byte)?;
+
+            return Ok(17)
+        } else {
+            self.pc += 3;
+
+            return Ok(11)
+        }
     }
 }
