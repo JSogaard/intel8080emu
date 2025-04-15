@@ -382,7 +382,7 @@ impl Processor {
             }
 
             // JC, JNC, JZ, JNZ, JM, JP, JPE, JPO (JCCC) opcodes
-            0xC2 | 0xCA | 0xD2 | 0xDA | 0xE2 | 0xEA | 0xF2 | 0xF3 => {
+            0xC2 | 0xCA | 0xD2 | 0xDA | 0xE2 | 0xEA | 0xF2 | 0xFA => {
                 let (low_byte, high_byte) = self.get_next_16bit()?;
                 self.jccc_opcode(opcode, low_byte, high_byte);
                 cycles = 10;
@@ -468,6 +468,20 @@ impl Processor {
                 self.out_opcode(num, port);
                 self.pc += 2;
                 cycles = 10;
+            }
+
+            // EI opcode
+            0xFB => {
+                self.ei_opcode();
+                self.pc += 1;
+                cycles = 4;
+            }
+
+            // DI opcode
+            0xF3 => {
+                self.di_opcode();
+                self.pc += 1;
+                cycles = 4;
             }
 
             // Invalid opcodes
@@ -1136,5 +1150,13 @@ impl Processor {
 
     fn out_opcode(&self, num: u8, port: &mut impl Port) {
         port.write_out(num, self.a);
+    }
+
+    fn ei_opcode(&mut self) {
+        self.interrupts_enabled = true;
+    }
+
+    fn di_opcode(&mut self) {
+        self.interrupts_enabled = false;
     }
 }
