@@ -2,6 +2,7 @@ use crate::{
     errors::{Error, Result},
     helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_to_word, word_to_bytes},
     memory::Memory,
+    port::Port,
 };
 
 use std::cmp::max;
@@ -66,7 +67,21 @@ impl Processor {
         Ok(())
     }
 
-    pub fn execute(&mut self) -> Result<u32> {
+    pub fn interrupt(&mut self, interrupt_num: u8) -> Result<()> {
+        if !self.interrupts_enabled {
+            return Ok(());
+        }
+
+        let (low_byte, high_byte) = word_to_bytes(self.pc);
+        self.push_16bit(low_byte, high_byte)?;
+
+        let address = ((interrupt_num & 0b111) << 3) as u16;
+        self.pc = address;
+
+        Ok(())
+    }
+
+    pub fn execute(&mut self, port: &mut impl Port) -> Result<u32> {
         if !self.rom_loaded {
             return Err(Error::RomNotLoaded);
         }
@@ -397,6 +412,34 @@ impl Processor {
                 cycles = self.rccc_opcode(opcode)?;
             }
 
+            // RST opcode
+            0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
+                self.rst_opcode(opcode)?;
+                self.pc += 1;
+                cycles = 11;
+            }
+
+            // PCHL opcode
+            0xE9 => {
+                self.pchl();
+                self.pc += 1;
+                cycles = 5;
+            }
+
+            // PUSH opcode
+            0xC5 | 0xD5 | 0xE5 | 0xF5 => {
+                self.push_opcode(opcode)?;
+                self.pc += 1;
+                cycles = 11;
+            }
+
+            // POP opcode
+            0xC1 | 0xD1 | 0xE1 | 0xF1 => {
+                self.pop_opcode(opcode)?;
+                self.pc += 1;
+                cycles = 10;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -552,6 +595,26 @@ impl Processor {
         self.sp += 2;
 
         Ok((low_byte, high_byte))
+    }
+
+    fn flags_to_byte(&self) -> u8 {
+        let mut byte = 2;
+
+        byte |= (self.flags.s as u8) << 7;
+        byte |= (self.flags.z as u8) << 6;
+        byte |= (self.flags.ac as u8) << 4;
+        byte |= (self.flags.p as u8) << 2;
+        byte |= self.flags.cy as u8;
+
+        byte
+    }
+
+    fn byte_to_flag(&mut self, flag_register: u8) {
+        self.flags.s = flag_register & 0x80 != 0;
+        self.flags.z = flag_register & 0x40 != 0;
+        self.flags.ac = flag_register & 0x10 != 0;
+        self.flags.p = flag_register & 0x4 != 0;
+        self.flags.cy = flag_register & 0x1 != 0;
     }
 
     // =====================================================================
@@ -960,5 +1023,63 @@ impl Processor {
 
             return Ok(5);
         }
+    }
+
+    fn rst_opcode(&mut self, opcode: u8) -> Result<()> {
+        let (low_byte, high_byte) = word_to_bytes(self.pc);
+        self.push_16bit(low_byte, high_byte)?;
+
+        let address = (opcode & 0b111000) as u16;
+        self.pc = address;
+
+        Ok(())
+    }
+
+    fn pchl(&mut self) {
+        let address = bytes_to_word(self.l, self.h);
+        self.pc = address;
+    }
+
+    fn push_opcode(&mut self, opcode: u8) -> Result<()> {
+        let (high_byte, low_byte) = match (opcode >> 4) & 0b11 {
+            0b00 => (self.b, self.c),
+            0b01 => (self.d, self.e),
+            0b10 => (self.h, self.l),
+            0b11 => {
+                let flag_register = self.flags_to_byte();
+                (flag_register, self.a)
+            }
+            _ => panic!("Failed to register pair from opcode: {:#x}", opcode),
+        };
+
+        self.push_16bit(low_byte, high_byte)?;
+
+        Ok(())
+    }
+
+    fn pop_opcode(&mut self, opcode: u8) -> Result<()> {
+        let (low_byte, high_byte) = self.pop_16bit()?;
+
+        match (opcode >> 4) & 0b11 {
+            0b00 => {
+                self.b = high_byte;
+                self.c = low_byte;
+            }
+            0b01 => {
+                self.d = high_byte;
+                self.e = low_byte;
+            }
+            0b10 => {
+                self.h = high_byte;
+                self.l = low_byte;
+            }
+            0b11 => {
+                self.byte_to_flag(high_byte);
+                self.a = low_byte;
+            }
+            _ => panic!("Failed to register pair from opcode: {:#x}", opcode),
+        }
+
+        Ok(())
     }
 }

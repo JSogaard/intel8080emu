@@ -1,4 +1,5 @@
 pub mod processor;
 pub mod memory;
+pub mod port;
 pub mod errors;
-mod helpers;
+pub mod helpers;
