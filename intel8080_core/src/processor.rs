@@ -440,6 +440,36 @@ impl Processor {
                 cycles = 10;
             }
 
+            // XTHL opcode
+            0xE3 => {
+                self.xthl_opcode()?;
+                self.pc += 1;
+                cycles = 18;
+            }
+
+            // SPHL opcode
+            0xF9 => {
+                self.sphl();
+                self.pc += 1;
+                cycles = 5;
+            }
+
+            // IN opcode
+            0xDB => {
+                let num = self.get_next_byte()?;
+                self.in_opcode(num, port);
+                self.pc += 2;
+                cycles = 10;
+            }
+
+            // OUT opcode
+            0xD3 => {
+                let num = self.get_next_byte()?;
+                self.out_opcode(num, port);
+                self.pc += 2;
+                cycles = 10;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -1081,5 +1111,30 @@ impl Processor {
         }
 
         Ok(())
+    }
+
+    fn xthl_opcode(&mut self) -> Result<()> {
+        let low_byte = self.l;
+        let high_byte = self.h;
+
+        self.l = self.ram.read(self.sp)?;
+        self.h = self.ram.read(self.sp + 1)?;
+
+        self.ram.write(self.sp, low_byte)?;
+        self.ram.write(self.sp + 1, high_byte)?;
+
+        Ok(())
+    }
+
+    fn sphl(&mut self) {
+        self.sp = bytes_to_word(self.l, self.h);
+    }
+
+    fn in_opcode(&mut self, num: u8, port: &mut impl Port) {
+        self.a = port.read_in(num);
+    }
+
+    fn out_opcode(&self, num: u8, port: &mut impl Port) {
+        port.write_out(num, self.a);
     }
 }
