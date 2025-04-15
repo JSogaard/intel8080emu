@@ -1,6 +1,6 @@
 use crate::{
     errors::{Error, Result},
-    helpers::{auxiliary_add, auxiliary_sub, bit_parity, word_to_bytes, bytes_to_word},
+    helpers::{auxiliary_add, auxiliary_sub, bit_parity, bytes_to_word, word_to_bytes},
     memory::Memory,
 };
 
@@ -35,7 +35,7 @@ struct Flags {
 }
 
 impl Processor {
-    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> u16) -> Self {
+    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> (usize, bool)) -> Self {
         Self {
             a: 0,
             b: 0,
@@ -386,6 +386,17 @@ impl Processor {
                 cycles = self.cccc_opcode(opcode, low_byte, high_byte)?;
             }
 
+            // RET opcode
+            0xC9 => {
+                self.ret_opcode()?;
+                cycles = 10;
+            }
+
+            // RC, RNC, RZ, RNZ, RM, RP, RPE, RPO (RCCC) opcodes
+            0xC0 | 0xC8 | 0xD0 | 0xD8 | 0xE0 | 0xE8 | 0xF0 | 0xF8 => {
+                cycles = self.rccc_opcode(opcode)?;
+            }
+
             // Invalid opcodes
             0x10 | 0x20 | 0x30 | 0x08 | 0x18 | 0x28 | 0x38 | 0xD9 | 0xCB | 0xDD | 0xED | 0xFD => {
                 return Err(Error::UnknownOpcode(opcode));
@@ -395,9 +406,9 @@ impl Processor {
         Ok(cycles)
     }
 
-    //  ====================================================================
+    // =====================================================================
     //                           HELPER FUNCTIONS
-    //  ====================================================================
+    // =====================================================================
 
     fn get_source_reg(&mut self, opcode: u8) -> Result<(u8, bool)> {
         let mut from_memory = false;
@@ -458,7 +469,7 @@ impl Processor {
             _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
         }
     }
-    
+
     fn get_conditional(&mut self, opcode: u8) -> bool {
         match (opcode >> 3) & 0b111 {
             0b000 => !self.flags.z,
@@ -913,7 +924,7 @@ impl Processor {
         self.pc += 3;
         let (low_return, high_return) = word_to_bytes(self.pc);
         self.push_16bit(low_return, high_return)?;
-        
+
         let address = bytes_to_word(low_byte, high_byte);
         self.pc = address;
 
@@ -924,11 +935,30 @@ impl Processor {
         if self.get_conditional(opcode) {
             self.call_opcode(low_byte, high_byte)?;
 
-            return Ok(17)
+            return Ok(17);
         } else {
             self.pc += 3;
 
-            return Ok(11)
+            return Ok(11);
+        }
+    }
+
+    fn ret_opcode(&mut self) -> Result<()> {
+        let (low_byte, high_byte) = self.pop_16bit()?;
+        self.pc = bytes_to_word(low_byte, high_byte);
+
+        Ok(())
+    }
+
+    fn rccc_opcode(&mut self, opcode: u8) -> Result<u32> {
+        if self.get_conditional(opcode) {
+            self.ret_opcode()?;
+
+            return Ok(11);
+        } else {
+            self.pc += 1;
+
+            return Ok(5);
         }
     }
 }
