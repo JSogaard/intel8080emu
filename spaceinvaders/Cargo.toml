@@ -4,4 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-color-eyre = "0.6.3"
+anyhow = "1.0.98"
+intel8080_core = { path = "../intel8080_core" }
+sdl2 = { version = "0.37.0" }
+thiserror = "2.0.12"

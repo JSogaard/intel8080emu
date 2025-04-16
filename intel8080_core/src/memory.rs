@@ -57,4 +57,14 @@ impl Memory {
 
         Ok(())
     }
+
+    pub fn memory_slice(&self, address: u16, size: usize) -> Result<&[u8]> {
+        let (address, _) = (self.memory_mapper)(address);
+
+        if address + size >= self.size {
+            Ok(&self.data[address..address + size])
+        } else {
+            Err(Error::InvalidMemory(address + size))
+        }
+    }
 }

@@ -81,6 +81,10 @@ impl Processor {
         Ok(())
     }
 
+    pub fn memory_slice(&self, address: u16, size: usize) -> Result<&[u8]> {
+        self.ram.memory_slice(address, size)
+    }
+
     pub fn execute(&mut self, port: &mut impl Port) -> Result<u32> {
         if !self.rom_loaded {
             return Err(Error::RomNotLoaded);
