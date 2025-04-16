@@ -4,4 +4,4 @@ members = ["intel8080_core", "spaceinvaders"]
 default-members = ["intel8080_core"]
 
 [profile.dev]
-debug = 2
+debug = "full"

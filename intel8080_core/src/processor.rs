@@ -285,7 +285,7 @@ impl Processor {
 
             // ORA opcodes
             0xB0..=0xB7 => {
-                cycles = self.ana_opcode(opcode)?;
+                cycles = self.ora_opcode(opcode)?;
                 self.pc += 1;
             }
 
@@ -415,7 +415,6 @@ impl Processor {
             // RST opcode
             0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => {
                 self.rst_opcode(opcode)?;
-                self.pc += 1;
                 cycles = 11;
             }
 
@@ -549,9 +548,9 @@ impl Processor {
 
     fn get_reg_pair(&self, opcode: u8) -> u16 {
         match (opcode >> 4) & 0b11 {
-            0b00 => bytes_to_word(self.c, self.b),
-            0b01 => bytes_to_word(self.e, self.d),
-            0b10 => bytes_to_word(self.l, self.h),
+            0b00 => self.get_bc(),
+            0b01 => self.get_de(),
+            0b10 => self.get_hl(),
             0b11 => self.sp,
             _ => panic!("Failed to parse register pair: {:#b}", (opcode >> 4) & 0b11),
         }
@@ -860,7 +859,7 @@ impl Processor {
         let (register, to_memory) = self.get_dest_reg(opcode)?;
 
         let prev_val = *register;
-        let result = register.wrapping_add(1);
+        let result = register.wrapping_sub(1);
         *register = result;
 
         self.flags.s = result & 0x80 != 0;
@@ -891,7 +890,7 @@ impl Processor {
 
     fn dad_opcode(&mut self, opcode: u8) {
         let source = self.get_reg_pair(opcode) as u32;
-        let destination = bytes_to_word(self.l, self.h) as u32;
+        let destination = self.get_hl() as u32;
 
         let result = destination.wrapping_add(source);
         (self.l, self.h) = word_to_bytes(result as u16);
@@ -900,25 +899,18 @@ impl Processor {
     }
 
     fn daa_opcode(&mut self) {
-        let mut acc = self.a as u16;
+        let mut adjustment = 0;
 
-        let overflow = (acc & 0xF) > 9;
-        if overflow || self.flags.ac {
-            self.flags.ac = overflow;
-            acc += 0x6;
+        if (self.a & 0xF) > 9 || self.flags.ac {
+            adjustment |= 0x6;
+        }
+        if (self.a >> 4) > 9 || self.flags.cy {
+            adjustment |= 0x60;
         }
 
-        let overflow = ((acc & 0xF0) >> 4) > 9;
-        if overflow || self.flags.cy {
-            self.flags.cy = overflow;
-            acc += 0x60;
-        }
-
-        self.a = acc as u8;
-
-        self.flags.s = self.a & 0x80 != 0;
-        self.flags.z = self.a == 0;
-        self.flags.p = bit_parity(self.a);
+        let result = self.a.wrapping_add(adjustment);
+        self.set_flags_add(self.a as u16 + adjustment as u16, result, self.a, adjustment);
+        self.a = result;
     }
 
     fn ana_opcode(&mut self, opcode: u8) -> Result<u32> {
@@ -1042,11 +1034,11 @@ impl Processor {
         if self.get_conditional(opcode) {
             self.call_opcode(low_byte, high_byte)?;
 
-            return Ok(17);
+            Ok(17)
         } else {
             self.pc += 3;
 
-            return Ok(11);
+            Ok(11)
         }
     }
 
@@ -1061,11 +1053,11 @@ impl Processor {
         if self.get_conditional(opcode) {
             self.ret_opcode()?;
 
-            return Ok(11);
+            Ok(11)
         } else {
             self.pc += 1;
 
-            return Ok(5);
+            Ok(5)
         }
     }
 
@@ -1080,7 +1072,7 @@ impl Processor {
     }
 
     fn pchl(&mut self) {
-        let address = bytes_to_word(self.l, self.h);
+        let address = self.get_hl();
         self.pc = address;
     }
 
@@ -1141,7 +1133,7 @@ impl Processor {
     }
 
     fn sphl(&mut self) {
-        self.sp = bytes_to_word(self.l, self.h);
+        self.sp = self.get_hl();
     }
 
     fn in_opcode(&mut self, num: u8, port: &mut impl Port) {
