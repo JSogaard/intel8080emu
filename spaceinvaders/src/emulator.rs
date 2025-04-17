@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, time::Duration};
 
 use intel8080_core::processor::Processor;
 use sdl2::{EventPump, Sdl, VideoSubsystem};
@@ -8,7 +8,7 @@ use crate::{display::Display, error::Error};
 
 const CLOCK_SPEED: u32 = 2000000;
 const FRAME_RATE: u32 = 60;
-const CYCLES_PER_FRAME: u32 = CLOCK_SPEED / FRAME_RATE;
+const CYCLES_PER_HALF_FRAME: u32 = CLOCK_SPEED / FRAME_RATE / 2;
 const RAM_SIZE: usize = 16384;
 
 pub struct Emulator {
@@ -35,6 +35,12 @@ impl Emulator {
             eventpump,
         })
     }
+}
+
+pub fn run(&mut self) -> Result<()> {
+    let hframe_length = Duration::from_secs_f64(1. / FRAME_RATE as f64 / 2.);
+
+    todo!()
 }
 
 fn memory_mapper(address: u16) -> (usize, bool) {
