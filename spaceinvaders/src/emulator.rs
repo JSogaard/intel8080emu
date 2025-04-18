@@ -15,6 +15,7 @@ use std::{
 const CLOCK_SPEED: u32 = 2000000;
 const FRAME_RATE: u32 = 60;
 const CYCLES_PER_TICK: u32 = CLOCK_SPEED / FRAME_RATE / 2;
+const TICK_LENGTH: Duration = Duration::from_nanos(1e9 as u64 / FRAME_RATE as u64 / 2);
 const RAM_SIZE: usize = 16384;
 
 pub struct Emulator {
@@ -49,8 +50,6 @@ impl Emulator {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        let tick_length = Duration::from_secs_f64(1. / FRAME_RATE as f64 / 2.);
-
         'main_loop: loop {
             let tick_start = Instant::now();
 
@@ -79,8 +78,8 @@ impl Emulator {
 
             // Time padding
             let elapsed = tick_start.elapsed();
-            if elapsed < tick_length {
-                std::thread::sleep(tick_length - elapsed);
+            if elapsed < TICK_LENGTH {
+                std::thread::sleep(TICK_LENGTH - elapsed);
             }
 
             // Run second tick
@@ -91,6 +90,8 @@ impl Emulator {
 
             let vram: &[u8] = self.processor.memory_slice(0x2400, PIXEL_BYTES)?;
             self.display.render(vram)?;
+
+            
         }
 
         todo!()

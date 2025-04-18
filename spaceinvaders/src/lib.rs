@@ -1,4 +1,6 @@
 pub mod emulator;
-pub mod display;
-pub mod input;
-pub mod error;
+mod display;
+mod input;
+mod audio;
+mod shift_register;
+mod error;

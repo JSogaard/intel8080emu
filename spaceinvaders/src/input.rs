@@ -1,7 +1,10 @@
 use intel8080_core::port::Port;
 
-pub struct Input {
+use crate::shift_register::ShiftRegister;
 
+pub struct Input {
+    shift_regster: ShiftRegister,
+    
 }
 
 impl Input {
