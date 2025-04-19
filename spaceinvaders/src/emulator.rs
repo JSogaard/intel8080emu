@@ -1,9 +1,8 @@
 use crate::{
     display::{Display, PIXEL_BYTES},
-    error::Error,
-    input::Input,
+    errors::{Error, Result},
+    io_handler::IoHandler,
 };
-use anyhow::Result;
 use intel8080_core::processor::Processor;
 use sdl2::{EventPump, Sdl, VideoSubsystem, event::Event, keyboard::Keycode};
 use std::{
@@ -21,7 +20,7 @@ const RAM_SIZE: usize = 16384;
 pub struct Emulator {
     processor: Processor,
     display: Display,
-    input: Input,
+    input: IoHandler,
     _sdl_context: Sdl,
     eventpump: EventPump,
 }
@@ -43,7 +42,7 @@ impl Emulator {
         Ok(Self {
             processor,
             display,
-            input: Input::new(),
+            input: IoHandler::try_new(),
             _sdl_context,
             eventpump,
         })

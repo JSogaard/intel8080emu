@@ -5,13 +5,6 @@ pub struct ShiftRegister {
 }
 
 impl ShiftRegister {
-    pub fn new() -> Self {
-        Self {
-            register: 0,
-            offset: 0,
-        }
-    }
-
     /// Insert value into high byte on OUT 4
     pub fn insert(&mut self, value: u8) {
         self.register = ((value as u16) << 8) | (self.register >> 8);
