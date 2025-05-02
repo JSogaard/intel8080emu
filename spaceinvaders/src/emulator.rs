@@ -20,13 +20,13 @@ const RAM_SIZE: usize = 16384;
 pub struct Emulator {
     processor: Processor,
     display: Display,
-    input: IoHandler,
+    io_handler: IoHandler,
     _sdl_context: Sdl,
     eventpump: EventPump,
 }
 
 impl Emulator {
-    pub fn try_new(rom_path: PathBuf) -> Result<Self> {
+    pub fn try_new(rom_path: PathBuf, dip_settings: (u8, bool)) -> Result<Self> {
         let _sdl_context: Sdl = sdl2::init().map_err(|e| Error::SdlError(e.to_string()))?;
         let video_subsystem: VideoSubsystem = _sdl_context
             .video()
@@ -42,7 +42,7 @@ impl Emulator {
         Ok(Self {
             processor,
             display,
-            input: IoHandler::try_new(),
+            io_handler: IoHandler::try_new(dip_settings)?,
             _sdl_context,
             eventpump,
         })
@@ -61,7 +61,15 @@ impl Emulator {
                     } => {
                         break 'main_loop;
                     }
-                    // TODO Handle keypresses
+
+                    Event::KeyDown { keycode: Some(keycode), .. } => {
+                        self.io_handler.set_key(keycode, true);
+                    }
+
+                    Event::KeyUp { keycode: Some(keycode), .. } => {
+                        self.io_handler.set_key(keycode, false);
+                    }
+
                     _ => {}
                 }
             }
@@ -69,7 +77,7 @@ impl Emulator {
             // Run first tick
             let mut cycles = 0;
             while cycles < CYCLES_PER_TICK {
-                cycles += self.processor.execute(&mut self.input)?;
+                cycles += self.processor.execute(&mut self.io_handler)?;
             }
 
             // Mid-frame interrupt
@@ -84,7 +92,7 @@ impl Emulator {
             // Run second tick
             cycles = 0;
             while cycles < 2 * CYCLES_PER_TICK {
-                cycles += self.processor.execute(&mut self.input)?;
+                cycles += self.processor.execute(&mut self.io_handler)?;
             }
 
             let vram: &[u8] = self.processor.memory_slice(0x2400, PIXEL_BYTES)?;
@@ -98,5 +106,9 @@ impl Emulator {
 }
 
 fn memory_mapper(address: u16) -> (usize, bool) {
-    todo!()
+    // Mask out the 2 unused upper RAM pins
+    let address = (address & 0x3FFF) as usize;
+    let is_rom = address < 0x2000;
+
+    (address, is_rom)
 }

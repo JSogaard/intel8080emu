@@ -13,6 +13,15 @@ pub enum Error {
 
     #[error("Invalid DIP switch input")]
     InvalidDipInput,
+
+    #[error("Audio output failed:\n{0}")]
+    AudioStreamError(#[from] rodio::StreamError),
+    
+    #[error("Audio output failed:\n{0}")]
+    AudioPlayError(#[from] rodio::PlayError),
+    
+    #[error("Audio output failed:\n{0}")]
+    AudioDecoderError(#[from] rodio::decoder::DecoderError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

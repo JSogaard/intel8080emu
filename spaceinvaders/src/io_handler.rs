@@ -1,13 +1,12 @@
 use crate::{
-    errors::{Error, Result},
-    shift_register::ShiftRegister,
+    audio::Audio, errors::{Error, Result}, shift_register::ShiftRegister
 };
 use intel8080_core::port::Port;
 use sdl2::keyboard::Keycode;
 
-#[derive(Clone, Debug)]
 pub struct IoHandler {
     buttons: Buttons,
+    audio: Audio,
     shift_regster: ShiftRegister,
     dip_shipnum: u8,
     dip_extraship_point: bool,
@@ -34,6 +33,7 @@ impl IoHandler {
 
         Ok(Self {
             buttons: Buttons::default(),
+            audio: Audio::try_new()?,
             shift_regster: ShiftRegister::default(),
             dip_shipnum: dip_settings.0,
             dip_extraship_point: dip_settings.1,
@@ -88,6 +88,13 @@ impl Port for IoHandler {
     }
 
     fn write_out(&mut self, port_num: u8, value: u8) {
+        // TODO Write out
+
+        match port_num {
+            2 => self.shift_regster.set_offset(value),
+
+        }
+
         todo!()
     }
 }

@@ -1,7 +1,6 @@
-use anyhow::Result;
 use sdl2::{VideoSubsystem, render::Canvas, sys::Window};
 
-use crate::errors::Error;
+use crate::errors::{Error, Result};
 
 const PIXEL_WIDTH: usize = 224;
 const PIXEL_HEIGHT: usize = 256;

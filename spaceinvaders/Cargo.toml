@@ -6,5 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 intel8080_core = { path = "../intel8080_core" }
+rodio = "0.20.1"
 sdl2 = { version = "0.37.0" }
 thiserror = "2.0.12"
