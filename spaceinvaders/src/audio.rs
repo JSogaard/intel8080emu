@@ -1,22 +1,32 @@
 use std::io::Cursor;
-use rodio::{Decoder, OutputStream, Sink};
+use rodio::{Decoder, OutputStream, Sink, Source};
 
 use crate::errors::Result;
 
-const UFO_SOUND: &[u8] = include_bytes!("../sounds/ufo_highpitch.wav");
-const SHOOT_SOUND: &[u8] = include_bytes!("../sounds/shoot.wav");
-const PLAYER_DEATH_SOUND: &[u8] = include_bytes!("../sounds/explosion.wav");
-const INVADER_DEATH_SOUND: &[u8] = include_bytes!("../sounds/invaderkilled.wav");
-const INVADER_1_SOUND: &[u8] = include_bytes!("../sounds/fastinvader1.wav");
-const INVADER_2_SOUND: &[u8] = include_bytes!("../sounds/fastinvader2.wav");
-const INVADER_3_SOUND: &[u8] = include_bytes!("../sounds/fastinvader3.wav");
-const INVADER_4_SOUND: &[u8] = include_bytes!("../sounds/fastinvader4.wav");
-const INVADER_HIT_SOUND: &[u8] = include_bytes!("../sounds/ufo_lowpitch.wav");
+const UFO_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/ufo_highpitch.wav"));
+const SHOOT_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/shoot.wav"));
+const PLAYER_DEATH_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/explosion.wav"));
+const INVADER_DEATH_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/invaderkilled.wav"));
+const INVADER_1_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/fastinvader1.wav"));
+const INVADER_2_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/fastinvader2.wav"));
+const INVADER_3_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/fastinvader3.wav"));
+const INVADER_4_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/fastinvader4.wav"));
+const INVADER_HIT_SOUND: Cursor<&[u8]> = Cursor::new(include_bytes!("../sounds/ufo_lowpitch.wav"));
 
 pub struct Audio {
     _stream: OutputStream,
     sinks: Sinks,
-    decoders: Decoders,
+
+    // Sound enabled
+    ufo_enabled: bool,
+    shoot_enabled: bool,
+    player_death_enabled: bool,
+    invader_death_enabled: bool,
+    invader1_enabled: bool,
+    invader2_enabled: bool,
+    invader3_enabled: bool,
+    invader4_enabled: bool,
+    invader_hit_enabled: bool,
 }
 
 struct Sinks {
@@ -31,22 +41,8 @@ struct Sinks {
     invader_hit: Sink,
 }
 
-struct Decoders {
-    ufo: Decoder<Cursor<&'static [u8]>>,
-    shoot: Decoder<Cursor<&'static [u8]>>,
-    player_death: Decoder<Cursor<&'static [u8]>>,
-    invader_death: Decoder<Cursor<&'static [u8]>>,
-    invader1: Decoder<Cursor<&'static [u8]>>,
-    invader2: Decoder<Cursor<&'static [u8]>>,
-    invader3: Decoder<Cursor<&'static [u8]>>,
-    invader4: Decoder<Cursor<&'static [u8]>>,
-    invader_hit: Decoder<Cursor<&'static [u8]>>,
-}
-
 impl Audio {
     pub fn try_new() -> Result<Self> {
-        // TODO Sound constructor
-
         let (_stream, stream_handle) = OutputStream::try_default()?;
 
         let sinks = Sinks {
@@ -61,21 +57,51 @@ impl Audio {
             invader_hit: Sink::try_new(&stream_handle)?,
         };
 
-        // Load audio files
-        let decoders = Decoders {
-            ufo: Decoder::new(Cursor::new(UFO_SOUND))?,
-            shoot: Decoder::new(Cursor::new(SHOOT_SOUND))?,
-            player_death: Decoder::new(Cursor::new(PLAYER_DEATH_SOUND))?,
-            invader_death: Decoder::new(Cursor::new(INVADER_DEATH_SOUND))?,
-            invader1: Decoder::new(Cursor::new(INVADER_1_SOUND))?,
-            invader2: Decoder::new(Cursor::new(INVADER_2_SOUND))?,
-            invader3: Decoder::new(Cursor::new(INVADER_3_SOUND))?,
-            invader4: Decoder::new(Cursor::new(INVADER_4_SOUND))?,
-            invader_hit: Decoder::new(Cursor::new(INVADER_HIT_SOUND))?,
-        };
-
-
-        
-        todo!()
+        Ok(Self {
+            _stream,
+            sinks,
+        })
     }
+
+    pub fn play_port3(&mut self, data: u8) -> Result<()> {
+        // UFO (looping)
+        play_looping(data & 1 != 0, &mut self.ufo_enabled, &mut self.sinks.ufo, UFO_SOUND)?;
+
+        // Shoot
+        play_once((data >> 1) & 1 != 0, &mut self.shoot_enabled, &mut self.sinks.shoot, SHOOT_SOUND)?;
+
+        // Player death
+        play_once((data >> 2) & 1 != 0, &mut self.player_death_enabled, &mut self.sinks.player_death, PLAYER_DEATH_SOUND)?;
+
+        // Invader death
+        play_once((data >> 3) & 1 != 0, &mut self.invader_death_enabled, &mut self.sinks.invader_death, INVADER_DEATH_SOUND)?;
+
+        Ok(())
+    }
+
+    // TODO Implement audio port 5
+}
+
+
+fn play_looping(pin: bool, enabled: &mut bool, sink: &mut Sink, sound: Cursor<&'static [u8]>) -> Result<()> {
+    if pin && !*enabled {
+        sink.append(Decoder::new_wav(sound)?.repeat_infinite());
+        *enabled = true;
+    } else if !pin && *enabled {
+        sink.stop();
+        *enabled = false;
+    }
+
+    Ok(())
+}
+
+fn play_once(pin: bool, enabled: &mut bool, sink: &mut Sink, sound: Cursor<&'static [u8]>) -> Result<()> {
+    if pin && !*enabled {
+        sink.append(Decoder::new_wav(sound)?);
+        *enabled = true;
+    } else if !pin && *enabled {
+        *enabled = false;
+    }
+
+    Ok(())
 }
