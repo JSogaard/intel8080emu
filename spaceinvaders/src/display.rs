@@ -26,12 +26,12 @@ impl Display {
             .opengl()
             .resizable()
             .build()
-            .map_err(|e| Error::SdlError(e.to_string()))?;
+            .map_err(|e| Error::Sdl(e.to_string()))?;
 
         let mut canvas: Canvas<sdl2::video::Window> = window
             .into_canvas()
             .build()
-            .map_err(|e| Error::SdlError(e.to_string()))?;
+            .map_err(|e| Error::Sdl(e.to_string()))?;
 
         canvas.clear();
         canvas.present();

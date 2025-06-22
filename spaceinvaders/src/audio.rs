@@ -74,10 +74,10 @@ impl Audio {
         })
     }
 
-    pub fn play_port3(&mut self, bit: u8) -> Result<()> {
+    pub fn play_port3(&mut self, byte: u8) -> Result<()> {
         // UFO (looping)
         play_looping(
-            bit & 1 != 0,
+            byte & 1 != 0,
             &mut self.ufo_enabled,
             &mut self.sinks.ufo,
             UFO_SOUND,
@@ -85,7 +85,7 @@ impl Audio {
 
         // Shoot
         play_once(
-            (bit >> 1) & 1 != 0,
+            (byte >> 1) & 1 != 0,
             &mut self.shoot_enabled,
             &mut self.sinks.shoot,
             SHOOT_SOUND,
@@ -93,7 +93,7 @@ impl Audio {
 
         // Player death
         play_once(
-            (bit >> 2) & 1 != 0,
+            (byte >> 2) & 1 != 0,
             &mut self.player_death_enabled,
             &mut self.sinks.player_death,
             PLAYER_DEATH_SOUND,
@@ -101,7 +101,7 @@ impl Audio {
 
         // Invader death
         play_once(
-            (bit >> 3) & 1 != 0,
+            (byte >> 3) & 1 != 0,
             &mut self.invader_death_enabled,
             &mut self.sinks.invader_death,
             INVADER_DEATH_SOUND,
@@ -110,10 +110,10 @@ impl Audio {
         Ok(())
     }
 
-    pub fn play_port5(&mut self, bit: u8) -> Result<()> {
+    pub fn play_port5(&mut self, byte: u8) -> Result<()> {
         // Invader 1
         play_once(
-            bit & 1 != 0,
+            byte & 1 != 0,
             &mut self.invader1_enabled,
             &mut self.sinks.invader1,
             INVADER_1_SOUND,
@@ -121,7 +121,7 @@ impl Audio {
 
         // Invader 2
         play_once(
-            (bit >> 1) & 1 != 0,
+            (byte >> 1) & 1 != 0,
             &mut self.invader2_enabled,
             &mut self.sinks.invader2,
             INVADER_2_SOUND,
@@ -129,7 +129,7 @@ impl Audio {
 
         // Invader 3
         play_once(
-            (bit >> 2) & 1 != 0,
+            (byte >> 2) & 1 != 0,
             &mut self.invader3_enabled,
             &mut self.sinks.invader3,
             INVADER_3_SOUND,
@@ -137,7 +137,7 @@ impl Audio {
 
         // Invader 4
         play_once(
-            (bit >> 3) & 1 != 0,
+            (byte >> 3) & 1 != 0,
             &mut self.invader4_enabled,
             &mut self.sinks.invader4,
             INVADER_4_SOUND,
@@ -145,7 +145,7 @@ impl Audio {
 
         // UFO hit
         play_once(
-            (bit >> 4) & 1 != 0,
+            (byte >> 4) & 1 != 0,
             &mut self.invader_hit_enabled,
             &mut self.sinks.invader_hit,
             INVADER_HIT_SOUND,

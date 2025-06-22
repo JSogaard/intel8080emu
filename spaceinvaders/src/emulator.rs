@@ -27,12 +27,12 @@ pub struct Emulator {
 
 impl Emulator {
     pub fn try_new(rom_path: PathBuf, dip_settings: (u8, bool)) -> Result<Self> {
-        let _sdl_context: Sdl = sdl2::init().map_err(|e| Error::SdlError(e.to_string()))?;
+        let _sdl_context: Sdl = sdl2::init().map_err(|e| Error::Sdl(e.to_string()))?;
         let video_subsystem: VideoSubsystem = _sdl_context
             .video()
-            .map_err(|e| Error::SdlError(e.to_string()))?;
+            .map_err(|e| Error::Sdl(e.to_string()))?;
 
-        let eventpump = _sdl_context.event_pump().map_err(Error::SdlError)?;
+        let eventpump = _sdl_context.event_pump().map_err(Error::Sdl)?;
 
         let rom: Vec<u8> = fs::read(rom_path)?;
         let mut processor = Processor::new(RAM_SIZE, memory_mapper);

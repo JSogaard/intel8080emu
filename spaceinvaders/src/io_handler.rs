@@ -88,13 +88,12 @@ impl Port for IoHandler {
     }
 
     fn write_out(&mut self, port_num: u8, value: u8) {
-        // TODO Write out
-
         match port_num {
             2 => self.shift_regster.set_offset(value),
-
+            3 => self.audio.play_port3(value).expect("An error occured while playing game audio"),
+            4 => self.shift_regster.insert(value),
+            5 => self.audio.play_port5(value).expect("An error occured while playing game audio"),
+            _ => panic!("Invalid port number was written OUT: {port_num}")
         }
-
-        todo!()
     }
 }
