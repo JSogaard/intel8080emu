@@ -7,7 +7,7 @@ use crate::{
 
 use std::cmp::max;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Processor {
     a: u8,
     b: u8,
@@ -36,7 +36,7 @@ struct Flags {
 }
 
 impl Processor {
-    pub fn new(ram_size: usize, memory_mapper: fn(u16) -> (usize, bool)) -> Self {
+    pub fn new(ram_size: usize, memory_mapper: impl Fn(u16) -> (usize, bool) + 'static) -> Self {
         Self {
             a: 0,
             b: 0,
@@ -425,7 +425,6 @@ impl Processor {
             // PCHL opcode
             0xE9 => {
                 self.pchl();
-                self.pc += 1;
                 cycles = 5;
             }
 
@@ -913,7 +912,12 @@ impl Processor {
         }
 
         let result = self.a.wrapping_add(adjustment);
-        self.set_flags_add(self.a as u16 + adjustment as u16, result, self.a, adjustment);
+        self.set_flags_add(
+            self.a as u16 + adjustment as u16,
+            result,
+            self.a,
+            adjustment,
+        );
         self.a = result;
     }
 
@@ -1066,7 +1070,7 @@ impl Processor {
     }
 
     fn rst_opcode(&mut self, opcode: u8) -> Result<()> {
-        let (low_byte, high_byte) = word_to_bytes(self.pc);
+        let (low_byte, high_byte) = word_to_bytes(self.pc + 1);
         self.push_16bit(low_byte, high_byte)?;
 
         let address = (opcode & 0b111000) as u16;

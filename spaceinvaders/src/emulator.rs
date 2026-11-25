@@ -95,7 +95,7 @@ impl Emulator {
                 cycles += self.processor.execute(&mut self.io_handler)?;
             }
 
-            let vram: &[u8] = self.processor.memory_slice(0x2400, PIXEL_BYTES)?;
+            let vram: &[u8] = self.processor.memory_slice(0x2400, PIXEL_BYTES as usize)?;
             self.display.render(vram)?;
 
             

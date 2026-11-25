@@ -1,18 +1,21 @@
+use std::fmt::Debug;
+
 use crate::errors::{Error, Result};
 
-#[derive(Clone, Debug)]
+type MemoryMapper = Box<dyn Fn(u16) -> (usize, bool)>;
+
 pub struct Memory {
     data: Vec<u8>,
     size: usize,
-    memory_mapper: fn(u16) -> (usize, bool),
+    memory_mapper: MemoryMapper,
 }
 
 impl Memory {
-    pub fn new(size: usize, memory_mapper: fn(u16) -> (usize, bool)) -> Self {
+    pub fn new(size: usize, memory_mapper: impl Fn(u16) -> (usize, bool) + 'static) -> Self {
         Self {
             data: vec![0; size],
             size,
-            memory_mapper,
+            memory_mapper: Box::new(memory_mapper),
         }
     }
 
@@ -66,5 +69,14 @@ impl Memory {
         } else {
             Err(Error::InvalidMemory(address + size))
         }
+    }
+}
+
+impl Debug for Memory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Memory")
+            .field("data", &self.data)
+            .field("size", &self.size)
+            .finish()
     }
 }

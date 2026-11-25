@@ -53,8 +53,8 @@ impl Display {
 
                 if pixel_on {
                     let rect = Rect::new(
-                        x as i32 * PIXEL_SIZE,
-                        y as i32 * PIXEL_SIZE,
+                        x as i32 * PIXEL_SIZE as i32,
+                        y as i32 * PIXEL_SIZE as i32,
                         PIXEL_SIZE,
                         PIXEL_SIZE,
                     );
